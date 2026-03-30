@@ -1,0 +1,13 @@
+[{
+  "modid": "solobacktrack",
+  "name": "Solo Backtrack",
+  "description": "A specialized Minecraft mod-client featuring Backtrack, AutoSprint, FullBright, and AutoRespawn. Backtrack simulates a controlled lag environment by delaying entity packets, providing a combat advantage.",
+  "version": "1.0",
+  "mcversion": "1.12.2",
+  "url": "",
+  "authorList": ["xzkak0ynick"],
+  "credits": "Created for the Solo Backtrack project.",
+  "logoFile": "",
+  "screenshots": [],
+  "dependencies": []
+}]
