@@ -4,6 +4,7 @@ import com.yourname.backtrack.module.impl.AutoRespawnModule;
 import com.yourname.backtrack.module.impl.AutoSprintModule;
 import com.yourname.backtrack.module.impl.BacktrackModule;
 import com.yourname.backtrack.module.impl.FullBrightModule;
+import com.yourname.backtrack.module.impl.KeepSprintModule;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
 
@@ -13,13 +14,14 @@ import java.util.List;
 
 public class ModuleManager {
 
-    private final List<Module> modules = new ArrayList<>();
+    private final List<com.yourname.backtrack.module.Module> modules = new ArrayList<>();
 
     public ModuleManager() {
         registerModule(new BacktrackModule());
         registerModule(new AutoSprintModule());
         registerModule(new FullBrightModule());
         registerModule(new AutoRespawnModule());
+        registerModule(new com.yourname.backtrack.module.impl.KeepSprintModule());
     }
 
     private void registerModule(Module module) {
