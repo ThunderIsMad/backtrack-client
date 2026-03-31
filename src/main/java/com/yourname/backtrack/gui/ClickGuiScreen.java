@@ -4,7 +4,7 @@ import com.yourname.backtrack.config.ConfigManager;
 import com.yourname.backtrack.hud.HudSettings;
 import com.yourname.backtrack.module.Category;
 import com.yourname.backtrack.module.Module;
-import com.yourname.backtrack.module.ModuleManager;
+import module.ModuleManager;
 import com.yourname.backtrack.module.impl.BacktrackModule;
 import com.yourname.backtrack.setting.ActionSetting;
 import com.yourname.backtrack.setting.BooleanSetting;
@@ -14,15 +14,15 @@ import com.yourname.backtrack.setting.Setting;
 import setting.SettingGroup;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiScreen;
+import net.minecraft.client.renderer.GlStateManager;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
+import org.lwjgl.opengl.GL11;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 
 public class ClickGuiScreen extends GuiScreen {
 
@@ -32,203 +32,272 @@ public class ClickGuiScreen extends GuiScreen {
     private final GuiTheme guiTheme;
     private final long openTime;
 
-    private static final int PANEL_W  = 120;
-    private static final int HEADER_H = 14;
-    private static final int MOD_H    = 18;
-    private static final int SET_H    = 16;
+    // --- Layout ---
+    private static final int WIN_W    = 300;   // full window width
+    private static final int WIN_H    = 220;   // full window height
+    private static final int CAT_W    = 72;    // left sidebar width
+    private static final int HEADER_H = 16;    // title bar
+    private static final int CAT_H    = 20;    // each category tab height
+    private static final int MOD_H    = 18;    // module row height
+    private static final int SET_H    = 16;    // setting row height
     private static final int GAP      = 1;
 
-    private final List<Panel> panels = new ArrayList<>();
-    private Module expandedModule    = null;
+    // --- Window state ---
+    private int winX, winY;
+    private boolean dragging;
+    private int dragOffX, dragOffY;
+
+    // --- Content state ---
+    private Category selectedCategory;
+    private Module expandedModule = null;
     private boolean expandTextSettings = false;
-    private boolean waitingForBind   = false;
-    private Panel draggingPanel      = null;
-    private int dragOffsetX, dragOffsetY;
+    private boolean waitingForBind = false;
+    private int scrollOffset = 0;
 
-    public HudSettings getHudSettings() {
-        return hudSettings;
-    }
-
-    private static final class Panel {
-        final Category category;
-        int x, y;
-        boolean collapsed = false;
-
-        Panel(Category category, int x, int y) {
-            this.category = category;
-            this.x = x;
-            this.y = y;
-        }
-
-        boolean isGuiPanel() { return category == null; }
-    }
+    public HudSettings getHudSettings() { return hudSettings; }
 
     public ClickGuiScreen(ModuleManager moduleManager, ConfigManager configManager,
                           HudSettings hudSettings, GuiTheme guiTheme) {
         this.moduleManager = moduleManager;
         this.configManager = configManager;
-        this.hudSettings   = hudSettings;
-        this.guiTheme      = guiTheme;
-        this.openTime      = System.currentTimeMillis();
+        this.hudSettings = hudSettings;
+        this.guiTheme = guiTheme;
+        this.openTime = System.currentTimeMillis();
+        // select first non-HUD category by default
+        for (Category cat : Category.values()) {
+            if (cat != Category.HUD) { selectedCategory = cat; break; }
+        }
     }
 
+    // =========================================================
+    //  initGui
+    // =========================================================
     @Override
     public void initGui() {
-        Map<Category, int[]> savedPos = new HashMap<>();
-        int[] savedGuiPos = null;
-        for (Panel p : panels) {
-            if (p.isGuiPanel()) savedGuiPos = new int[]{p.x, p.y};
-            else savedPos.put(p.category, new int[]{p.x, p.y});
-        }
+        // default position — center of screen
+        winX = (width  - WIN_W) / 2;
+        winY = (height - WIN_H) / 2;
 
-        panels.clear();
-        int x = 5, y = 5;
-        for (Category cat : Category.values()) {
-            if (cat == Category.HUD) continue;
-            int[] pos = savedPos.get(cat);
-            panels.add(new Panel(cat, pos != null ? pos[0] : x, pos != null ? pos[1] : y));
-            x += PANEL_W + 4;
-            if (x + PANEL_W > width - 5) { x = 5; y += 200; }
+        // load saved position if exists
+        int[] saved = configManager.loadGuiPosition(); // returns null or int[]{x, y}
+        if (saved != null) {
+            winX = saved[0];
+            winY = saved[1];
+            // clamp — in case screen resolution changed
+            winX = Math.max(0, Math.min(width  - WIN_W, winX));
+            winY = Math.max(0, Math.min(height - WIN_H, winY));
         }
-        panels.add(new Panel(null,
-                savedGuiPos != null ? savedGuiPos[0] : x,
-                savedGuiPos != null ? savedGuiPos[1] : y));
     }
 
+    // =========================================================
+    //  drawScreen
+    // =========================================================
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
         drawDefaultBackground();
         Gui.drawRect(0, 0, width, height, animated(guiTheme.getBackdropColor()));
 
-        for (Panel panel : panels) {
-            drawPanel(panel, mouseX, mouseY);
-        }
+        // outer glow / shadow
+        Gui.drawRect(winX - 2, winY - 2, winX + WIN_W + 2, winY + WIN_H + 2,
+                animated(guiTheme.getSoftShadowColor()));
+
+        // window body
+        Gui.drawRect(winX, winY, winX + WIN_W, winY + WIN_H,
+                animated(guiTheme.getWindowGlassColor()));
+
+        // ── title bar ──────────────────────────────────────────
+        Gui.drawRect(winX, winY, winX + WIN_W, winY + HEADER_H,
+                animated(guiTheme.getTitleColor()));
+        String title = "Backtrack";
+        fontRenderer.drawStringWithShadow(title,
+                winX + WIN_W / 2 - fontRenderer.getStringWidth(title) / 2,
+                winY + 4,
+                animated(guiTheme.getAccentTextColor()));
+        Gui.drawRect(winX, winY + HEADER_H, winX + WIN_W, winY + HEADER_H + 1,
+                animated(guiTheme.getStrokeColor()));
+
+        // ── left sidebar ───────────────────────────────────────
+        int sideX = winX;
+        int sideY = winY + HEADER_H + 1;
+        int sideH = WIN_H - HEADER_H - 1;
+        Gui.drawRect(sideX, sideY, sideX + CAT_W, sideY + sideH,
+                animated(guiTheme.withAlpha(guiTheme.getTitleColor(), 140)));
+        // sidebar right border
+        Gui.drawRect(sideX + CAT_W, sideY, sideX + CAT_W + 1, sideY + sideH,
+                animated(guiTheme.getStrokeColor()));
+
+        drawCategoryTabs(sideX, sideY, mouseX, mouseY);
+
+        // ── right content (modules) ─────────────────────────────
+        int cntX = winX + CAT_W + 1;
+        int cntY = sideY;
+        int cntW = WIN_W - CAT_W - 1;
+        drawModuleContent(cntX, cntY, cntW, sideH, mouseX, mouseY);
+
+        // outline
+        drawOutline(winX, winY, WIN_W, WIN_H,
+                animated(guiTheme.withAlpha(guiTheme.getStrokeColor(), 90)));
 
         super.drawScreen(mouseX, mouseY, partialTicks);
     }
 
-    private void drawPanel(Panel panel, int mouseX, int mouseY) {
-        int panelH = getPanelHeight(panel);
-        int x = panel.x, y = panel.y;
+    // =========================================================
+    //  Category tabs
+    // =========================================================
+    private void drawCategoryTabs(int x, int startY, int mouseX, int mouseY) {
+        int y = startY + 4;
+        for (Category cat : Category.values()) {
+            if (cat == Category.HUD) continue;
+            boolean selected = cat == selectedCategory;
+            boolean hov = isHov(x, y, CAT_W, CAT_H, mouseX, mouseY);
 
-        Gui.drawRect(x - 2, y - 2, x + PANEL_W + 2, y + panelH + 2,
-                animated(guiTheme.getSoftShadowColor()));
+            if (selected) {
+                Gui.drawRect(x, y, x + CAT_W, y + CAT_H,
+                        animated(guiTheme.withAlpha(guiTheme.getAccentColor(), 45)));
+                Gui.drawRect(x, y, x + 2, y + CAT_H,
+                        animated(guiTheme.getAccentColor()));
+            } else if (hov) {
+                Gui.drawRect(x, y, x + CAT_W, y + CAT_H,
+                        animated(guiTheme.getPanelHoverColor()));
+            }
 
-        Gui.drawRect(x, y, x + PANEL_W, y + panelH,
-                animated(guiTheme.getWindowGlassColor()));
+            int textColor = selected ? guiTheme.getAccentTextColor()
+                    : hov     ? guiTheme.getTextPrimaryColor()
+                      :           guiTheme.getTextSecondaryColor();
+            // Capitalize first letter
+            String name = cat.name().charAt(0) + cat.name().substring(1).toLowerCase();
+            fontRenderer.drawStringWithShadow(name, x + 8, y + 6, animated(textColor));
 
-        Gui.drawRect(x, y, x + PANEL_W, y + HEADER_H,
-                animated(guiTheme.getTitleColor()));
-        Gui.drawRect(x, y + HEADER_H - 1, x + PANEL_W, y + HEADER_H,
-                animated(guiTheme.getStrokeColor()));
-
-        String title = panel.isGuiPanel() ? "GUI" : panel.category.name();
-        int titleColor = panel.isGuiPanel()
-                ? guiTheme.getAccentTextColor()
-                : guiTheme.getTextPrimaryColor();
-        fontRenderer.drawStringWithShadow(title, x + 5, y + 3, titleColor);
-
-        String indicator = panel.collapsed ? "+" : "-";
-        fontRenderer.drawStringWithShadow(indicator, x + PANEL_W - 8, y + 3,
-                animated(guiTheme.getTextMutedColor()));
-
-        drawOutline(x, y, PANEL_W, panelH,
-                animated(guiTheme.withAlpha(guiTheme.getStrokeColor(), 80)));
-
-        if (panel.collapsed) return;
-
-        if (panel.isGuiPanel()) {
-            drawGuiPanelContent(x, y + HEADER_H, mouseX, mouseY);
-        } else {
-            drawModuleList(panel, x, y + HEADER_H, mouseX, mouseY);
+            y += CAT_H + GAP;
         }
     }
 
-    private void drawModuleList(Panel panel, int x, int startY, int mouseX, int mouseY) {
-        int y = startY;
-        for (Module mod : getModulesForCategory(panel.category)) {
-            boolean hov      = isHov(x, y, PANEL_W, MOD_H, mouseX, mouseY);
-            boolean expanded = mod == expandedModule;
+    // =========================================================
+    //  Module list (with scissor clipping + scroll)
+    // =========================================================
+    private void drawModuleContent(int x, int startY, int cntW, int cntH,
+                                   int mouseX, int mouseY) {
+        if (selectedCategory == null) return;
 
-            int bg = hov ? guiTheme.getPanelHoverColor() : guiTheme.getPanelColor();
-            Gui.drawRect(x, y, x + PANEL_W, y + MOD_H, animated(bg));
+        List<Module> modules = getModulesForCategory(selectedCategory);
+        int totalH = getModuleListHeight(modules);
 
-            if (expanded) {
-                Gui.drawRect(x, y, x + PANEL_W, y + MOD_H,
-                        animated(guiTheme.withAlpha(guiTheme.getAccentColor(), 30)));
-                Gui.drawRect(x, y, x + 2, y + MOD_H,
-                        animated(guiTheme.getAccentHoverColor()));
+        // clamp scroll
+        int maxScroll = Math.max(0, totalH - cntH);
+        if (scrollOffset > maxScroll) scrollOffset = maxScroll;
+
+        // GL scissor so rows don't bleed outside the panel
+        enableScissor(x, startY, cntW, cntH);
+
+        int y = startY - scrollOffset;
+        for (Module mod : modules) {
+            if (y + MOD_H >= startY && y < startY + cntH) {
+                drawModuleRow(x, y, cntW, mod, mouseX, mouseY);
             }
-
-            int dotColor = mod.isEnabled()
-                    ? guiTheme.getToggleOnColor()
-                    : guiTheme.getToggleOffColor();
-            Gui.drawRect(x + 5, y + 7, x + 8, y + 10, animated(dotColor));
-
-            int textColor = expanded
-                    ? guiTheme.getTextPrimaryColor()
-                    : mod.isEnabled()
-                      ? guiTheme.getAccentTextColor()
-                      : guiTheme.getTextSecondaryColor();
-            fontRenderer.drawStringWithShadow(mod.getName(), x + 12, y + 5, textColor);
-
-            if (!mod.getSettings().isEmpty()) {
-                String arr = expanded ? "^" : "v";
-                fontRenderer.drawStringWithShadow(arr, x + PANEL_W - 9, y + 5,
-                        animated(guiTheme.getTextMutedColor()));
-            }
-
             y += MOD_H + GAP;
 
-            if (expanded) {
-                y = drawInlineSettings(x, y, mod, mouseX, mouseY);
+            if (mod == expandedModule) {
+                y = drawInlineSettings(x, y, cntW, mod, mouseX, mouseY,
+                        startY, startY + cntH);
             }
+        }
+
+        GL11.glDisable(GL11.GL_SCISSOR_TEST);
+    }
+
+    private void drawModuleRow(int x, int y, int w, Module mod,
+                               int mouseX, int mouseY) {
+        boolean hov      = isHov(x, y, w, MOD_H, mouseX, mouseY);
+        boolean expanded = mod == expandedModule;
+
+        // background
+        int bg = expanded ? guiTheme.withAlpha(guiTheme.getAccentColor(), 28)
+                : hov      ? guiTheme.getPanelHoverColor()
+                  :             guiTheme.getPanelColor();
+        Gui.drawRect(x, y, x + w, y + MOD_H, animated(bg));
+
+        // enabled accent bar on left
+        if (mod.isEnabled()) {
+            Gui.drawRect(x, y, x + 2, y + MOD_H, animated(guiTheme.getAccentColor()));
+        }
+
+        // module name
+        int textColor = mod.isEnabled() ? guiTheme.getAccentTextColor()
+                : expanded        ? guiTheme.getTextPrimaryColor()
+                  :                   guiTheme.getTextSecondaryColor();
+        fontRenderer.drawStringWithShadow(mod.getName(), x + 7, y + 5, animated(textColor));
+
+        // "ON" label if enabled
+        if (mod.isEnabled()) {
+            int sw = fontRenderer.getStringWidth("ON");
+            fontRenderer.drawStringWithShadow("ON",
+                    x + w - sw - (mod.getSettings().isEmpty() ? 5 : 14),
+                    y + 5, animated(guiTheme.getToggleOnColor()));
+        }
+
+        // expand arrow
+        if (!mod.getSettings().isEmpty()) {
+            fontRenderer.drawStringWithShadow(expanded ? "^" : "v",
+                    x + w - 9, y + 5, animated(guiTheme.getTextMutedColor()));
         }
     }
 
-    private int drawInlineSettings(int x, int startY, Module mod, int mouseX, int mouseY) {
+    // =========================================================
+    //  Inline settings
+    // =========================================================
+    private int drawInlineSettings(int x, int startY, int w, Module mod,
+                                   int mouseX, int mouseY,
+                                   int clipTop, int clipBot) {
         int y = startY;
 
-        boolean bindHov = isHov(x, y, PANEL_W, SET_H, mouseX, mouseY);
-        String bindVal  = waitingForBind ? "PRESS KEY..." : mod.getKeyName();
-        drawSettingRow(x, y, "Bind", bindVal, 0, bindHov, 0xFFFFE082);
+        // bind row
+        if (y + SET_H >= clipTop && y < clipBot) {
+            boolean hov = isHov(x, y, w, SET_H, mouseX, mouseY);
+            String bindVal = waitingForBind ? "PRESS KEY..." : mod.getKeyName();
+            drawSettingRow(x, y, w, "Bind", bindVal, 0, hov, 0xFFFFE082);
+        }
         y += SET_H + GAP;
 
-        List<com.yourname.backtrack.setting.Setting> mainSettings = getMainSettings(mod);
-        for (int i = 0; i < mainSettings.size(); i++) {
-            Setting s   = mainSettings.get(i);
-            boolean hov = isHov(x, y, PANEL_W, SET_H, mouseX, mouseY);
-            drawSettingRow(x, y, s.getName(), getSettingValueText(s),
-                    i + 1, hov, getSettingAccentColor(s));
+        List<Setting> main = getMainSettings(mod);
+        for (int i = 0; i < main.size(); i++) {
+            Setting s = main.get(i);
+            if (y + SET_H >= clipTop && y < clipBot) {
+                boolean hov = isHov(x, y, w, SET_H, mouseX, mouseY);
+                drawSettingRow(x, y, w, s.getName(), getSettingValueText(s),
+                        i + 1, hov, getSettingAccentColor(s));
+            }
             y += SET_H + GAP;
         }
 
         if (mod instanceof BacktrackModule) {
-            boolean hov = isHov(x, y, PANEL_W, SET_H, mouseX, mouseY);
-            drawSettingRow(x, y, "Text Settings",
-                    expandTextSettings ? "^" : ">",
-                    mainSettings.size() + 1, hov, 0xFF56CCF2);
+            if (y + SET_H >= clipTop && y < clipBot) {
+                boolean hov = isHov(x, y, w, SET_H, mouseX, mouseY);
+                drawSettingRow(x, y, w, "Text Settings",
+                        expandTextSettings ? "^" : ">",
+                        main.size() + 1, hov, 0xFF56CCF2);
+            }
             y += SET_H + GAP;
 
             if (expandTextSettings) {
-                List<Setting> textSettings = getTextSettings(mod);
-                for (int i = 0; i < textSettings.size(); i++) {
-                    Setting s   = textSettings.get(i);
-                    boolean hov2 = isHov(x, y, PANEL_W, SET_H, mouseX, mouseY);
-                    drawSettingRow(x, y, s.getName(), getSettingValueText(s),
-                            mainSettings.size() + 2 + i, hov2, getSettingAccentColor(s));
+                List<Setting> txt = getTextSettings(mod);
+                for (int i = 0; i < txt.size(); i++) {
+                    Setting s = txt.get(i);
+                    if (y + SET_H >= clipTop && y < clipBot) {
+                        boolean hov = isHov(x, y, w, SET_H, mouseX, mouseY);
+                        drawSettingRow(x, y, w, s.getName(), getSettingValueText(s),
+                                main.size() + 2 + i, hov, getSettingAccentColor(s));
+                    }
                     y += SET_H + GAP;
                 }
             }
         }
-
         return y;
     }
 
-    private void drawSettingRow(int x, int y, String left, String right,
+    private void drawSettingRow(int x, int y, int w, String left, String right,
                                 int rowIdx, boolean hov, int accent) {
         int bg = hov ? guiTheme.getPanelHoverColor() : guiTheme.getRowAltColor(rowIdx);
-        Gui.drawRect(x, y, x + PANEL_W, y + SET_H, animated(bg));
+        Gui.drawRect(x, y, x + w, y + SET_H, animated(bg));
         Gui.drawRect(x, y, x + 2, y + SET_H,
                 animated(guiTheme.withAlpha(accent, hov ? 180 : 70)));
 
@@ -236,38 +305,191 @@ public class ClickGuiScreen extends GuiScreen {
                 guiTheme.getTextPrimaryColor());
 
         if (right != null && !right.isEmpty()) {
-            int rw    = fontRenderer.getStringWidth(right);
+            int rw = fontRenderer.getStringWidth(right);
             int rColor = "ON".equals(right)           ? guiTheme.getToggleOnColor()
                     : "OFF".equals(right)          ? guiTheme.getToggleOffColor()
                       : "PRESS KEY...".equals(right) ? animated(guiTheme.getAccentHoverColor())
-                        : guiTheme.getTextSecondaryColor();
-            fontRenderer.drawStringWithShadow(right, x + PANEL_W - rw - 5, y + 4, rColor);
+                        :                                guiTheme.getTextSecondaryColor();
+            fontRenderer.drawStringWithShadow(right, x + w - rw - 5, y + 4, rColor);
         }
     }
 
-    private void drawGuiPanelContent(int x, int startY, int mouseX, int mouseY) {
-        int y = startY;
-        String[] rows = {
-                "Accent: "    + guiTheme.getAccentName(),
-                "Background: " + guiTheme.getBackgroundName(),
-                "Reset Colors"
-        };
-        for (int i = 0; i < rows.length; i++) {
-            boolean hov = isHov(x, y, PANEL_W, SET_H, mouseX, mouseY);
-            drawSettingRow(x, y, rows[i], "", i, hov, guiTheme.getAccentHoverColor());
+    // =========================================================
+    //  Mouse click
+    // =========================================================
+    @Override
+    protected void mouseClicked(int mouseX, int mouseY, int btn) throws IOException {
+        // title bar → drag
+        if (btn == 0 && isHov(winX, winY, WIN_W, HEADER_H, mouseX, mouseY)) {
+            dragging = true;
+            dragOffX = mouseX - winX;
+            dragOffY = mouseY - winY;
+            super.mouseClicked(mouseX, mouseY, btn);
+            return;
+        }
+
+        // category tabs
+        int sideY = winY + HEADER_H + 1;
+        int ty = sideY + 4;
+        for (Category cat : Category.values()) {
+            if (cat == Category.HUD) continue;
+            if (isHov(winX, ty, CAT_W, CAT_H, mouseX, mouseY)) {
+                if (selectedCategory != cat) {
+                    selectedCategory = cat;
+                    expandedModule   = null;
+                    expandTextSettings = false;
+                    waitingForBind   = false;
+                    scrollOffset     = 0;
+                }
+                super.mouseClicked(mouseX, mouseY, btn);
+                return;
+            }
+            ty += CAT_H + GAP;
+        }
+
+        // module content area
+        int cntX = winX + CAT_W + 1;
+        int cntY = sideY;
+        int cntW = WIN_W - CAT_W - 1;
+        int cntH = WIN_H - HEADER_H - 1;
+        if (isHov(cntX, cntY, cntW, cntH, mouseX, mouseY)) {
+            handleModuleContentClick(cntX, cntY, cntW, mouseX, mouseY, btn);
+        }
+
+        super.mouseClicked(mouseX, mouseY, btn);
+    }
+
+    private void handleModuleContentClick(int x, int startY, int cntW,
+                                          int mouseX, int mouseY, int btn) {
+        if (selectedCategory == null) return;
+        int y = startY - scrollOffset;
+
+        for (Module mod : getModulesForCategory(selectedCategory)) {
+            if (isHov(x, y, cntW, MOD_H, mouseX, mouseY)) {
+                if (btn == 0) {
+                    mod.toggle();
+                } else if (btn == 1) {
+                    if (expandedModule == mod) {
+                        expandedModule     = null;
+                        expandTextSettings = false;
+                        waitingForBind     = false;
+                    } else {
+                        expandedModule     = mod;
+                        expandTextSettings = false;
+                        waitingForBind     = false;
+                    }
+                }
+                return;
+            }
+            y += MOD_H + GAP;
+
+            if (mod != expandedModule) continue;
+
+            // bind
+            if (isHov(x, y, cntW, SET_H, mouseX, mouseY)) {
+                if (btn == 0) waitingForBind = !waitingForBind;
+                return;
+            }
             y += SET_H + GAP;
+
+            for (Setting s : getMainSettings(mod)) {
+                if (isHov(x, y, cntW, SET_H, mouseX, mouseY)) {
+                    handleSettingClick(mod, s, btn);
+                    return;
+                }
+                y += SET_H + GAP;
+            }
+
+            if (mod instanceof BacktrackModule) {
+                if (isHov(x, y, cntW, SET_H, mouseX, mouseY)) {
+                    expandTextSettings = !expandTextSettings;
+                    return;
+                }
+                y += SET_H + GAP;
+
+                if (expandTextSettings) {
+                    for (Setting s : getTextSettings(mod)) {
+                        if (isHov(x, y, cntW, SET_H, mouseX, mouseY)) {
+                            handleSettingClick(mod, s, btn);
+                            return;
+                        }
+                        y += SET_H + GAP;
+                    }
+                }
+            }
         }
     }
 
-    private int getPanelHeight(Panel panel) {
-        if (panel.collapsed) return HEADER_H;
+    // =========================================================
+    //  Scroll
+    // =========================================================
+    @Override
+    public void handleMouseInput() throws IOException {
+        super.handleMouseInput();
+        int wheel = Mouse.getEventDWheel();
+        if (wheel == 0) return;
 
-        if (panel.isGuiPanel()) {
-            return HEADER_H + 3 * (SET_H + GAP);
+        int mx = Mouse.getEventX() * width / mc.displayWidth;
+        int my = height - Mouse.getEventY() * height / mc.displayHeight - 1;
+
+        int cntX = winX + CAT_W + 1;
+        int cntY = winY + HEADER_H + 1;
+        int cntW = WIN_W - CAT_W - 1;
+        int cntH = WIN_H - HEADER_H - 1;
+
+        if (isHov(cntX, cntY, cntW, cntH, mx, my)) {
+            scrollOffset += wheel > 0 ? -8 : 8;
+            if (scrollOffset < 0) scrollOffset = 0;
         }
+    }
 
-        int h = HEADER_H;
-        for (Module mod : getModulesForCategory(panel.category)) {
+    // =========================================================
+    //  Drag
+    // =========================================================
+    @Override
+    protected void mouseClickMove(int mouseX, int mouseY, int btn, long time) {
+        if (dragging) {
+            winX = Math.max(0, Math.min(width  - WIN_W, mouseX - dragOffX));
+            winY = Math.max(0, Math.min(height - WIN_H, mouseY - dragOffY));
+        }
+        super.mouseClickMove(mouseX, mouseY, btn, time);
+    }
+
+    @Override
+    protected void mouseReleased(int mouseX, int mouseY, int btn) {
+        if (btn == 0) dragging = false;
+        super.mouseReleased(mouseX, mouseY, btn);
+    }
+
+    // =========================================================
+    //  Keyboard
+    // =========================================================
+    @Override
+    protected void keyTyped(char typed, int keyCode) throws IOException {
+        if (waitingForBind && expandedModule != null) {
+            expandedModule.setKeyCode(
+                    keyCode == Keyboard.KEY_ESCAPE ? Keyboard.KEY_NONE : keyCode);
+            waitingForBind = false;
+            return;
+        }
+        if (keyCode == Keyboard.KEY_ESCAPE) {
+            saveAndClose();
+            return;
+        }
+        super.keyTyped(typed, keyCode);
+    }
+
+    private void saveAndClose() {
+        configManager.saveGuiPosition(winX, winY);
+        mc.displayGuiScreen(null);
+    }
+
+    // =========================================================
+    //  Helpers
+    // =========================================================
+    private int getModuleListHeight(List<Module> modules) {
+        int h = 0;
+        for (Module mod : modules) {
             h += MOD_H + GAP;
             if (mod == expandedModule) {
                 int rows = 1 + getMainSettings(mod).size();
@@ -284,15 +506,13 @@ public class ClickGuiScreen extends GuiScreen {
     private List<Module> getModulesForCategory(Category cat) {
         List<Module> result = new ArrayList<>();
         for (Module m : moduleManager.getModules()) {
-            if (m.getCategory() == cat) {
-                result.add(m);
-            }
+            if (m.getCategory() == cat) result.add(m);
         }
         return result;
     }
 
     private List<Setting> getMainSettings(Module mod) {
-        ArrayList<Setting> result = new ArrayList<>();
+        List<Setting> result = new ArrayList<>();
         for (Setting s : mod.getSettings()) {
             if (s.getGroup() != SettingGroup.HUDTEXT
                     && s.getGroup() != SettingGroup.DEBUGWINDOW) {
@@ -303,119 +523,11 @@ public class ClickGuiScreen extends GuiScreen {
     }
 
     private List<Setting> getTextSettings(Module mod) {
-        ArrayList<Setting> result = new ArrayList<>();
+        List<Setting> result = new ArrayList<>();
         for (Setting s : mod.getSettings()) {
             if (s.getGroup() == SettingGroup.HUDTEXT) result.add(s);
         }
         return result;
-    }
-
-    @Override
-    protected void mouseClicked(int mouseX, int mouseY, int btn) throws IOException {
-        for (int i = panels.size() - 1; i >= 0; i--) {
-            Panel panel = panels.get(i);
-            if (handlePanelClick(panel, mouseX, mouseY, btn)) {
-                panels.remove(i);
-                panels.add(panel);
-                break;
-            }
-        }
-        super.mouseClicked(mouseX, mouseY, btn);
-    }
-
-    private boolean handlePanelClick(Panel panel, int mouseX, int mouseY, int btn) {
-        int panelH = getPanelHeight(panel);
-        if (!isHov(panel.x, panel.y, PANEL_W, panelH, mouseX, mouseY)) return false;
-
-        if (isHov(panel.x, panel.y, PANEL_W, HEADER_H, mouseX, mouseY)) {
-            if (btn == 0) {
-                draggingPanel = panel;
-                dragOffsetX   = mouseX - panel.x;
-                dragOffsetY   = mouseY - panel.y;
-            } else if (btn == 1) {
-                panel.collapsed = !panel.collapsed;
-                if (panel.collapsed) {
-                    expandedModule     = null;
-                    expandTextSettings = false;
-                    waitingForBind     = false;
-                }
-            }
-            return true;
-        }
-
-        if (panel.collapsed) return true;
-
-        if (panel.isGuiPanel()) {
-            handleGuiPanelClick(panel.x, panel.y + HEADER_H, mouseX, mouseY, btn);
-            return true;
-        }
-
-        int y = panel.y + HEADER_H;
-        for (Module mod : getModulesForCategory(panel.category)) {
-            if (isHov(panel.x, y, PANEL_W, MOD_H, mouseX, mouseY)) {
-                if (btn == 0) {
-                    mod.toggle();
-                } else if (btn == 1) {
-                    if (expandedModule == mod) {
-                        expandedModule     = null;
-                        expandTextSettings = false;
-                        waitingForBind     = false;
-                    } else {
-                        expandedModule     = mod;
-                        expandTextSettings = false;
-                        waitingForBind     = false;
-                    }
-                }
-                return true;
-            }
-            y += MOD_H + GAP;
-
-            if (mod != expandedModule) continue;
-
-            if (isHov(panel.x, y, PANEL_W, SET_H, mouseX, mouseY)) {
-                if (btn == 0) waitingForBind = !waitingForBind;
-                return true;
-            }
-            y += SET_H + GAP;
-
-            for (Setting s : getMainSettings(mod)) {
-                if (isHov(panel.x, y, PANEL_W, SET_H, mouseX, mouseY)) {
-                    handleSettingClick(mod, s, btn);
-                    return true;
-                }
-                y += SET_H + GAP;
-            }
-
-            if (mod instanceof BacktrackModule) {
-                if (isHov(panel.x, y, PANEL_W, SET_H, mouseX, mouseY)) {
-                    expandTextSettings = !expandTextSettings;
-                    return true;
-                }
-                y += SET_H + GAP;
-
-                if (expandTextSettings) {
-                    for (Setting s : getTextSettings(mod)) {
-                        if (isHov(panel.x, y, PANEL_W, SET_H, mouseX, mouseY)) {
-                            handleSettingClick(mod, s, btn);
-                            return true;
-                        }
-                        y += SET_H + GAP;
-                    }
-                }
-            }
-        }
-
-        return true;
-    }
-
-    private void handleGuiPanelClick(int x, int startY, int mouseX, int mouseY, int btn) {
-        if (btn != 0) return;
-        int y = startY;
-        if (isHov(x, y, PANEL_W, SET_H, mouseX, mouseY)) { guiTheme.cycleAccentColor();    return; }
-        y += SET_H + GAP;
-        if (isHov(x, y, PANEL_W, SET_H, mouseX, mouseY)) { guiTheme.cycleBackgroundStyle(); return; }
-        y += SET_H + GAP;
-        if (isHov(x, y, PANEL_W, SET_H, mouseX, mouseY)) { guiTheme.reset(); }
     }
 
     private void handleSettingClick(Module mod, Setting s, int btn) {
@@ -425,8 +537,7 @@ public class ClickGuiScreen extends GuiScreen {
             ((ModeSetting) s).cycle();
         } else if (s instanceof NumberSetting) {
             NumberSetting ns = (NumberSetting) s;
-            if (btn == 0) ns.increase();
-            else          ns.decrease();
+            if (btn == 0) ns.increase(); else ns.decrease();
         } else if (s instanceof ActionSetting) {
             ((ActionSetting) s).trigger(
                     new ActionSetting.ActionContext(
@@ -437,88 +548,26 @@ public class ClickGuiScreen extends GuiScreen {
         configManager.saveBacktrackInfoPosition(moduleManager);
     }
 
-    @Override
-    public void handleMouseInput() throws IOException {
-        super.handleMouseInput();
-
-        int wheel = Mouse.getEventDWheel();
-        if (wheel == 0) return;
-
-        int mouseX = Mouse.getEventX() * width / mc.displayWidth;
-        int mouseY = height - Mouse.getEventY() * height / mc.displayHeight - 1;
-
-        for (Panel panel : panels) {
-            int panelH = getPanelHeight(panel);
-            if (!isHov(panel.x, panel.y, PANEL_W, panelH, mouseX, mouseY)) continue;
-            if (panel.collapsed || panel.isGuiPanel()) continue;
-
-            int delta = wheel > 0 ? -15 : 15;
-            panel.y = Math.max(0, Math.min(height - panelH, panel.y + delta));
-            break;
-        }
-    }
-
-    @Override
-    protected void mouseClickMove(int mouseX, int mouseY, int btn, long time) {
-        if (draggingPanel != null) {
-            draggingPanel.x = mouseX - dragOffsetX;
-            draggingPanel.y = mouseY - dragOffsetY;
-            clampPanel(draggingPanel);
-        }
-        super.mouseClickMove(mouseX, mouseY, btn, time);
-    }
-
-    @Override
-    protected void mouseReleased(int mouseX, int mouseY, int btn) {
-        if (btn == 0) draggingPanel = null;
-        super.mouseReleased(mouseX, mouseY, btn);
-    }
-
-    @Override
-    protected void keyTyped(char typed, int keyCode) throws IOException {
-        if (waitingForBind && expandedModule != null) {
-            if (keyCode == Keyboard.KEY_ESCAPE) {
-                expandedModule.setKeyCode(Keyboard.KEY_NONE);
-            } else {
-                expandedModule.setKeyCode(keyCode);
-            }
-            waitingForBind = false;
-            return;
-        }
-
-        if (keyCode == Keyboard.KEY_ESCAPE) {
-            saveAndClose();
-            return;
-        }
-
-        super.keyTyped(typed, keyCode);
-    }
-
-    private void saveAndClose() {
-        for (Panel panel : panels) {
-            if (!panel.isGuiPanel()) {
-                configManager.saveGuiPosition(panel.x, panel.y);
-                break;
-            }
-        }
-        mc.displayGuiScreen(null);
-    }
-
     private boolean isHov(int x, int y, int w, int h, int mx, int my) {
         return mx >= x && mx < x + w && my >= y && my < y + h;
     }
 
-    private void clampPanel(Panel panel) {
-        int panelH = getPanelHeight(panel);
-        panel.x = Math.max(0, Math.min(width  - PANEL_W, panel.x));
-        panel.y = Math.max(0, Math.min(height - panelH,  panel.y));
+    private void drawOutline(int x, int y, int w, int h, int color) {
+        Gui.drawRect(x,         y,         x + w, y + 1,     color);
+        Gui.drawRect(x,         y + h - 1, x + w, y + h,     color);
+        Gui.drawRect(x,         y,         x + 1, y + h,     color);
+        Gui.drawRect(x + w - 1, y,         x + w, y + h,     color);
     }
 
-    private void drawOutline(int x, int y, int w, int h, int color) {
-        Gui.drawRect(x,         y,         x + w,     y + 1,     color);
-        Gui.drawRect(x,         y + h - 1, x + w,     y + h,     color);
-        Gui.drawRect(x,         y,         x + 1,     y + h,     color);
-        Gui.drawRect(x + w - 1, y,         x + w,     y + h,     color);
+    private void enableScissor(int x, int y, int w, int h) {
+        double scaleX = (double) mc.displayWidth  / width;
+        double scaleY = (double) mc.displayHeight / height;
+        int sx = (int)(x * scaleX);
+        int sy = (int)(mc.displayHeight - (y + h) * scaleY);
+        int sw = (int)(w * scaleX);
+        int sh = (int)(h * scaleY);
+        GL11.glEnable(GL11.GL_SCISSOR_TEST);
+        GL11.glScissor(sx, sy, sw, sh);
     }
 
     private int animated(int color) {

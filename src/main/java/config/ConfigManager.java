@@ -4,7 +4,7 @@ import com.yourname.backtrack.gui.GuiTheme;
 import com.yourname.backtrack.hud.HudSettings;
 import com.yourname.backtrack.module.Module;
 import com.yourname.backtrack.module.ModuleHudSettings;
-import com.yourname.backtrack.module.ModuleManager;
+import module.ModuleManager;
 import com.yourname.backtrack.module.impl.BacktrackModule;
 import com.yourname.backtrack.setting.BooleanSetting;
 import com.yourname.backtrack.setting.ModeSetting;

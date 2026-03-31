@@ -1,7 +1,7 @@
 package com.yourname.backtrack.gui;
 
 import com.yourname.backtrack.config.ConfigManager;
-import com.yourname.backtrack.module.ModuleManager;
+import module.ModuleManager;
 import com.yourname.backtrack.module.impl.BacktrackModule;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiScreen;

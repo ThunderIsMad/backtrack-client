@@ -2,7 +2,7 @@ package com.yourname.backtrack.hud;
 
 import com.yourname.backtrack.module.Module;
 import com.yourname.backtrack.module.ModuleHudSettings;
-import com.yourname.backtrack.module.ModuleManager;
+import module.ModuleManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Gui;
 import net.minecraftforge.client.event.RenderGameOverlayEvent;

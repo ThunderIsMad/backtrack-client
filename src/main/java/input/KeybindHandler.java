@@ -2,7 +2,7 @@ package com.yourname.backtrack.input;
 
 import com.yourname.backtrack.config.ConfigManager;
 import com.yourname.backtrack.module.Module;
-import com.yourname.backtrack.module.ModuleManager;
+import module.ModuleManager;
 import net.minecraftforge.client.event.InputUpdateEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;

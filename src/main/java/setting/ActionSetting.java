@@ -3,7 +3,7 @@ package com.yourname.backtrack.setting;
 import com.yourname.backtrack.config.ConfigManager;
 import com.yourname.backtrack.gui.ClickGuiScreen;
 import com.yourname.backtrack.gui.GuiTheme;
-import com.yourname.backtrack.module.ModuleManager;
+import module.ModuleManager;
 import setting.SettingGroup;
 
 public class ActionSetting extends Setting {
