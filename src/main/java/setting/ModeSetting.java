@@ -1,5 +1,7 @@
 package com.yourname.backtrack.setting;
 
+import setting.SettingGroup;
+
 import java.util.List;
 
 public class ModeSetting extends Setting {

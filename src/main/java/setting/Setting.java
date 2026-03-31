@@ -1,5 +1,7 @@
 package com.yourname.backtrack.setting;
 
+import setting.SettingGroup;
+
 public abstract class Setting {
 
     private final String name;

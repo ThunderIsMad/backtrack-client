@@ -1,5 +1,7 @@
 package com.yourname.backtrack.setting;
 
+import setting.SettingGroup;
+
 public class NumberSetting extends Setting {
 
     private double value;

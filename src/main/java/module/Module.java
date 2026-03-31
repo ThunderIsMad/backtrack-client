@@ -4,7 +4,7 @@ import com.yourname.backtrack.setting.ActionSetting;
 import com.yourname.backtrack.setting.BooleanSetting;
 import com.yourname.backtrack.setting.ModeSetting;
 import com.yourname.backtrack.setting.Setting;
-import com.yourname.backtrack.setting.SettingGroup;
+import setting.SettingGroup;
 import com.yourname.backtrack.gui.HudEditorScreen;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.settings.KeyBinding;

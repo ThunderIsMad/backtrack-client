@@ -1,5 +1,7 @@
 package com.yourname.backtrack.setting;
 
+import setting.SettingGroup;
+
 public class BooleanSetting extends Setting {
 
     private boolean value;

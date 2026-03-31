@@ -1,7 +1,8 @@
-package com.yourname.backtrack.setting;
+package setting;
 
 public enum SettingGroup {
     MAIN,
     HUD_TEXT,
-    DEBUG_WINDOW
+    HUDTEXT, DEBUG_WINDOW;
+    public static final SettingGroup DEBUGWINDOW =null ;
 }
