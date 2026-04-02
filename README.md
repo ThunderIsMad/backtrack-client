@@ -4,10 +4,12 @@
 This project is a specialized Minecraft mod-client built on Minecraft Forge 1.12.2. It is designed to provide utility and combat advantages through various modules, most notably the **Backtrack** module.
 
 ### Core Features
-- **Backtrack**: Simulates a controlled lag environment by delaying specific entity packets (entity movement, teleportation). This allows players to "hit through time" by attacking the delayed position of an entity, effectively increasing combat range and reliability.
+- **Backtrack**: Simulates a controlled lag environment by delaying specific entity packets (entity movement, teleportation, and head rotation). This allows players to "hit through time" by attacking the delayed position of an entity, effectively increasing combat range and reliability.
 - **AutoSprint**: Automatically keeps the player sprinting, with customizable conditions such as requiring forward movement or allowing sprinting while sneaking.
 - **FullBright**: Increases game gamma to provide maximum visibility in dark areas, with multiple presets (Soft, Normal, Max, Custom).
 - **AutoRespawn**: Automatically reschedules a respawn after death with a configurable delay, allowing for faster return to gameplay.
+- **Reach**: Extends the player's attack distance by a configurable amount, allowing for hits from up to 6.0 blocks away.
+- **KeepSprint**: Automatically maintains the player's sprinting state while moving forward, ensuring maximum mobility during combat.
 - **HUD & GUI**: Features a customizable HUD to display active modules and a ClickGUI for easy setting management.
 
 ## How to use it

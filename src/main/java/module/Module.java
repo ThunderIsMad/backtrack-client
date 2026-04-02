@@ -4,9 +4,10 @@ import com.yourname.backtrack.setting.ActionSetting;
 import com.yourname.backtrack.setting.BooleanSetting;
 import com.yourname.backtrack.setting.ModeSetting;
 import com.yourname.backtrack.setting.Setting;
-import com.yourname.backtrack.setting.SettingGroup;
+import setting.SettingGroup;
 import com.yourname.backtrack.gui.HudEditorScreen;
 import net.minecraft.client.Minecraft;
+import net.minecraftforge.client.event.InputUpdateEvent;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.util.text.TextComponentString;
 import org.lwjgl.input.Keyboard;
@@ -110,6 +111,9 @@ public abstract class Module {
         sendClientMessage(name + ": OFF");
     }
 
+    public void onInputUpdate(InputUpdateEvent event) {
+    }
+
     protected void sendClientMessage(String message) {
         if (mc.player != null) {
             mc.player.sendMessage(new TextComponentString(message));
@@ -134,7 +138,7 @@ public abstract class Module {
 
     private BooleanSetting createHudBoolSetting(String name, boolean initial,
                                                 Consumer<Boolean> sync) {
-        return new BooleanSetting(name, initial, SettingGroup.HUD_TEXT) {
+        return new BooleanSetting(name, initial, SettingGroup.HUDTEXT) {
             @Override
             public void toggle() {
                 super.toggle();
@@ -166,7 +170,7 @@ public abstract class Module {
                 "HUD Color",
                 HUD_COLOR_NAMES,
                 hudSettings.getColorName(),
-                SettingGroup.HUD_TEXT
+                SettingGroup.HUDTEXT
         ) {
             @Override
             public void cycle() {
@@ -184,7 +188,7 @@ public abstract class Module {
 
     protected ActionSetting createResetHudPositionSetting() {
         return new ActionSetting("Reset HUD Position", () -> {
-        }, SettingGroup.HUD_TEXT);
+        }, SettingGroup.HUDTEXT);
     }
 
     protected ActionSetting createOpenHudEditorSetting() {
@@ -194,7 +198,7 @@ public abstract class Module {
                         context.getModuleManager(),
                         context.getConfigManager(),
                         context.getGuiTheme()
-                )), SettingGroup.HUD_TEXT);
+                )), SettingGroup.HUDTEXT);
     }
 
     private void syncHudColorFromMode(String value) {
