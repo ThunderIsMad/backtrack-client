@@ -1,6 +1,56 @@
 ```
-# Compiled and build artifacts
+# Java build artifacts
 *.class
+*.jar
+*.war
+*.ear
+
+# Gradle
+.gradle/
+build/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# Logs
+*.log
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Temporary files
+*.tmp
+*.swp
+*.swo
+
+# Package manager
+node_modules/
+
+# Python (if any)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+.mypy_cache/
+.pytest_cache/
+
+# Compiled Binary files
 *.o
 *.obj
 *.exe
@@ -8,47 +58,8 @@
 *.so
 *.a
 *.out
-*.pyc
-__pycache__/
 
-# Dependencies
-node_modules/
-venv/
-.venv/
-.gradle/
-target/
-dist/
-build/
-
-# Cache directories
-.mypy_cache/
-.pytest_cache/
-.julia/
-.zig/
-
-# Editor/IDE files
-.vscode/
-.idea/
-*.swp
-*.swo
-*.tmp
-
-# System files
-.DS_Store
-Thumbs.db
-.env
-.env.local
-*.env.*
-
-# Logs
-*.log
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Compressed files
+# Archives
 *.zip
 *.gz
 *.tar
@@ -67,4 +78,8 @@ htmlcov/
 *.Z
 *.lz
 *.lzo
+*.tar.gz
+*.tar.bz2
+*.tar.xz
+*.tar.zst
 ```
