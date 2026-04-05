@@ -1,85 +1,37 @@
 ```
-# Java build artifacts
-*.class
-*.jar
-*.war
-*.ear
-
-# Gradle
+# Dependencies
 .gradle/
-build/
+node_modules/
+venv/
+.venv/
+__pycache__/
+.mypy_cache/
+.pytest_cache/
 
-# IDE
-.idea/
-*.iml
-*.ipr
-*.iws
+# Build artifacts
+build/
+dist/
+target/
 
 # Logs
 *.log
+coverage/
+htmlcov/
+.coverage
 
 # Environment
 .env
 .env.local
 *.env.*
 
-# OS
-.DS_Store
-Thumbs.db
-
-# Coverage
-coverage/
-htmlcov/
-.coverage
-
-# Temporary files
-*.tmp
+# Editors
+.vscode/
+.idea/
 *.swp
 *.swo
+*.tmp
 
-# Package manager
-node_modules/
-
-# Python (if any)
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.venv/
-venv/
-.mypy_cache/
-.pytest_cache/
-
-# Compiled Binary files
-*.o
-*.obj
-*.exe
-*.dll
-*.so
-*.a
-*.out
-
-# Archives
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
-*.zst
-*.lz4
-*.lzh
-*.cab
-*.arj
-*.rpm
-*.deb
-*.Z
-*.lz
-*.lzo
-*.tar.gz
-*.tar.bz2
-*.tar.xz
-*.tar.zst
+# System
+.DS_Store
+Thumbs.db
 ```
