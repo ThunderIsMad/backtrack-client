@@ -42,6 +42,8 @@ public class ClickGuiScreen extends GuiScreen {
 
     private Module  expandedModule = null;
     private boolean waitingForBind = false;
+    private boolean draggingSlider = false;
+    private NumberSetting draggedSlider = null;
 
     private static class Panel {
         final Category category;
@@ -194,8 +196,12 @@ public class ClickGuiScreen extends GuiScreen {
             Setting s = main.get(i);
             if (y + SET_H >= clipTop && y < clipBot) {
                 boolean hov = isHov(x, y, PANEL_W, SET_H, mouseX, mouseY);
-                drawSettingRow(x, y, s.getName(), getSettingValueText(s),
-                        i + 1, hov, getSettingAccentColor(s));
+                if (s instanceof NumberSetting) {
+                    drawNumberSettingSlider(x, y, (NumberSetting) s, i + 1, hov, mouseX);
+                } else {
+                    drawSettingRow(x, y, s.getName(), getSettingValueText(s),
+                            i + 1, hov, getSettingAccentColor(s));
+                }
             }
             y += SET_H + ROW_GAP;
         }
@@ -227,6 +233,39 @@ public class ClickGuiScreen extends GuiScreen {
         }
     }
 
+    private void drawNumberSettingSlider(int x, int y, NumberSetting ns,
+                                         int rowIdx, boolean hov, int mouseX) {
+        int bg = hov ? guiTheme.getPanelHoverColor() : guiTheme.getRowAltColor(rowIdx);
+        Gui.drawRect(x, y, x + PANEL_W, y + SET_H, animated(bg));
+        Gui.drawRect(x, y, x + 2, y + SET_H,
+                animated(guiTheme.withAlpha(guiTheme.getAccentColor(), hov ? 180 : 70)));
+
+        int maxLeftW = PANEL_W - 60 - 8;
+        String label = ns.getName();
+        while (label.length() > 1 && fontRenderer.getStringWidth(label) > maxLeftW) {
+            label = label.substring(0, label.length() - 1);
+        }
+        fontRenderer.drawStringWithShadow(label, x + 5, y + 2,
+                guiTheme.getTextPrimaryColor());
+
+        int sliderX = x + PANEL_W - 55;
+        int sliderY = y + 3;
+        int sliderW = 50;
+        int sliderH = SET_H - 6;
+
+        double pct = (ns.getValue() - ns.getMin()) / (ns.getMax() - ns.getMin());
+        int fillW = (int)(sliderW * pct);
+
+        Gui.drawRect(sliderX, sliderY, sliderX + sliderW, sliderY + sliderH,
+                animated(guiTheme.getSliderBgColor()));
+        Gui.drawRect(sliderX, sliderY, sliderX + fillW, sliderY + sliderH,
+                animated(guiTheme.getAccentColor()));
+
+        String valStr = String.format(Locale.US, "%.1f", ns.getValue());
+        fontRenderer.drawStringWithShadow(valStr, sliderX - 4 - fontRenderer.getStringWidth(valStr),
+                y + 2, guiTheme.getTextSecondaryColor());
+    }
+
     @Override
     protected void mouseClicked(int mouseX, int mouseY, int btn) throws IOException {
         for (Panel panel : panels) {
@@ -236,6 +275,31 @@ public class ClickGuiScreen extends GuiScreen {
             }
         }
         super.mouseClicked(mouseX, mouseY, btn);
+    }
+
+    @Override
+    protected void mouseClickMove(int mouseX, int mouseY, int btn, long time) {
+        for (Panel panel : panels) {
+            if (!panel.dragging) continue;
+            panel.x = Math.max(0, Math.min(width  - PANEL_W,  mouseX - panel.dragOffX));
+            panel.y = Math.max(0, Math.min(height - HEADER_H, mouseY - panel.dragOffY));
+        }
+        if (draggingSlider && draggedSlider != null && btn == 0) {
+            updateSliderFromMouse(draggedSlider, mouseX, width / 2 - 55, 50);
+        }
+        super.mouseClickMove(mouseX, mouseY, btn, time);
+    }
+
+    private void updateSliderFromMouse(NumberSetting ns, int mouseX, int sliderX, int sliderW) {
+        double range = ns.getMax() - ns.getMin();
+        double pct = (double)(mouseX - sliderX) / sliderW;
+        pct = Math.max(0, Math.min(1, pct));
+        double newValue = ns.getMin() + pct * range;
+        double step = ns.getIncrement();
+        if (step > 0) {
+            newValue = Math.round(newValue / step) * step;
+        }
+        ns.setValue(newValue);
     }
 
     private boolean handlePanelClick(Panel panel, int mouseX, int mouseY, int btn) {
@@ -290,6 +354,23 @@ public class ClickGuiScreen extends GuiScreen {
             rowY += SET_H + ROW_GAP;
 
             for (Setting s : getMainSettings(mod)) {
+                if (s instanceof NumberSetting) {
+                    int sliderX = x + PANEL_W - 55;
+                    int sliderY = rowY + 3;
+                    int sliderW = 50;
+                    int sliderH = SET_H - 6;
+                    if (isHov(sliderX, sliderY, sliderW, sliderH, mouseX, mouseY)) {
+                        if (btn == 0) {
+                            draggingSlider = true;
+                            draggedSlider = (NumberSetting) s;
+                            updateSliderFromMouse(draggedSlider, mouseX, sliderX, sliderW);
+                            return true;
+                        } else {
+                            handleSettingClick(mod, s, btn);
+                            return true;
+                        }
+                    }
+                }
                 if (isHov(x, rowY, PANEL_W, SET_H, mouseX, mouseY)) {
                     handleSettingClick(mod, s, btn);
                     return true;
@@ -322,19 +403,11 @@ public class ClickGuiScreen extends GuiScreen {
     }
 
     @Override
-    protected void mouseClickMove(int mouseX, int mouseY, int btn, long time) {
-        for (Panel panel : panels) {
-            if (!panel.dragging) continue;
-            panel.x = Math.max(0, Math.min(width  - PANEL_W,  mouseX - panel.dragOffX));
-            panel.y = Math.max(0, Math.min(height - HEADER_H, mouseY - panel.dragOffY));
-        }
-        super.mouseClickMove(mouseX, mouseY, btn, time);
-    }
-
-    @Override
     protected void mouseReleased(int mouseX, int mouseY, int btn) {
         if (btn == 0) {
             for (Panel panel : panels) panel.dragging = false;
+            draggingSlider = false;
+            draggedSlider = null;
         }
         super.mouseReleased(mouseX, mouseY, btn);
     }

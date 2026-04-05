@@ -1,57 +1,30 @@
-```
-# Gradle
-.gradle/
+# Compiled Java classes
+*.class
+
+# Maven/Gradle build artifacts
+target/
 build/
-!build.gradle
 
 # Dependencies
 lib/
 libs/
 
+# IDE files
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
 # Logs
 *.log
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
 
 # Environment
 .env
 .env.local
 *.env.*
-
-# IDE
-.idea/
-*.iml
-*.ipr
-*.iws
-.vscode/
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Temp files
-*.tmp
-*.temp
-*~
-.swp
-.swo
-
-# Python (if applicable)
-__pycache__/
-*.pyc
-*.pyo
-.Python
-venv/
-.venv/
-pip-log.txt
-pip-delete-this-directory.txt
-
-# Coverage
-.coverage
-coverage/
-htmlcov/
-
-# Testing
-.pytest_cache/
-.mypy_cache/
-.nyc_output/
-coverage.xml
-```

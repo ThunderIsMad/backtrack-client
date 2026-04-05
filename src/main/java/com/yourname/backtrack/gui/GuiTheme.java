@@ -160,6 +160,15 @@ public class GuiTheme {
         return shiftColor(base, offset);
     }
 
+    public int getSliderBgColor() {
+        switch (backgroundIndex) {
+            case 1: return 0x800B0E14;
+            case 2: return 0x80100A12;
+            case 3: return 0x800A110C;
+            default: return 0x80080A0E;
+        }
+    }
+
     // ─── Animation helpers ────────────────────────────────────────────────────
 
     public int blend(int a, int b, float t) {
