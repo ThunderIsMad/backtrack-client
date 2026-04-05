@@ -1,4 +1,4 @@
-package module;
+package com.yourname.backtrack.module;
 
 import com.yourname.backtrack.module.impl.AutoRespawnModule;
 import com.yourname.backtrack.module.impl.AutoSprintModule;
@@ -15,7 +15,7 @@ import java.util.List;
 
 public class ModuleManager {
 
-    private final List<com.yourname.backtrack.module.Module> modules = new ArrayList<>();
+    private final List<Module> modules = new ArrayList<>();
 
     public ModuleManager() {
         registerModule(new BacktrackModule());
@@ -26,14 +26,14 @@ public class ModuleManager {
         registerModule(new ReachModule());
     }
 
-    private void registerModule(com.yourname.backtrack.module.Module module) {
+    private void registerModule(Module module) {
         module.getHudSettings().setDefaultPosition(5, 5 + modules.size() * 14);
         modules.add(module);
         ClientRegistry.registerKeyBinding(module.getKeyBinding());
         MinecraftForge.EVENT_BUS.register(module);
     }
 
-    public List<com.yourname.backtrack.module.Module> getModules() {
+    public List<Module> getModules() {
         return Collections.unmodifiableList(modules);
     }
 }
