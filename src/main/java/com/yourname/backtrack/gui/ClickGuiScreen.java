@@ -19,8 +19,10 @@ import org.lwjgl.opengl.GL11;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 public class ClickGuiScreen extends GuiScreen {
 
@@ -44,6 +46,9 @@ public class ClickGuiScreen extends GuiScreen {
     private boolean waitingForBind = false;
     private boolean draggingSlider = false;
     private NumberSetting draggedSlider = null;
+    private int draggedSliderX = 0;
+    private int draggedSliderW = 0;
+    private final Map<NumberSetting, Double> sliderAnimations = new HashMap<>();
 
     private static class Panel {
         final Category category;
@@ -253,8 +258,16 @@ public class ClickGuiScreen extends GuiScreen {
         int sliderW = 50;
         int sliderH = SET_H - 6;
 
-        double pct = (ns.getValue() - ns.getMin()) / (ns.getMax() - ns.getMin());
-        int fillW = (int)(sliderW * pct);
+        double realPct = (ns.getValue() - ns.getMin()) / (ns.getMax() - ns.getMin());
+        Double animVal = sliderAnimations.get(ns);
+        if (animVal == null) {
+            animVal = realPct;
+            sliderAnimations.put(ns, animVal);
+        }
+        double animatedPct = animVal + (realPct - animVal) * 0.2;
+        sliderAnimations.put(ns, animatedPct);
+
+        int fillW = (int)(sliderW * animatedPct);
 
         Gui.drawRect(sliderX, sliderY, sliderX + sliderW, sliderY + sliderH,
                 animated(guiTheme.getSliderBgColor()));
@@ -285,7 +298,7 @@ public class ClickGuiScreen extends GuiScreen {
             panel.y = Math.max(0, Math.min(height - HEADER_H, mouseY - panel.dragOffY));
         }
         if (draggingSlider && draggedSlider != null && btn == 0) {
-            updateSliderFromMouse(draggedSlider, mouseX, width / 2 - 55, 50);
+            updateSliderFromMouse(draggedSlider, mouseX, draggedSliderX, draggedSliderW);
         }
         super.mouseClickMove(mouseX, mouseY, btn, time);
     }
@@ -363,6 +376,8 @@ public class ClickGuiScreen extends GuiScreen {
                         if (btn == 0) {
                             draggingSlider = true;
                             draggedSlider = (NumberSetting) s;
+                            draggedSliderX = sliderX;
+                            draggedSliderW = sliderW;
                             updateSliderFromMouse(draggedSlider, mouseX, sliderX, sliderW);
                             return true;
                         } else {
@@ -408,6 +423,8 @@ public class ClickGuiScreen extends GuiScreen {
             for (Panel panel : panels) panel.dragging = false;
             draggingSlider = false;
             draggedSlider = null;
+            draggedSliderX = 0;
+            draggedSliderW = 0;
         }
         super.mouseReleased(mouseX, mouseY, btn);
     }
