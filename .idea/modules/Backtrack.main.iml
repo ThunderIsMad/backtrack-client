@@ -5,6 +5,7 @@
       <configuration>
         <autoDetectTypes>
           <platformType>FORGE</platformType>
+          <platformType>MIXIN</platformType>
           <platformType>MCP</platformType>
         </autoDetectTypes>
         <projectReimportVersion>1</projectReimportVersion>
@@ -12,10 +13,9 @@
     </facet>
   </component>
   <component name="McpModuleSettings">
-    <option name="mappingFile" value="C:\Backtrack\build\createMcpToSrg\output.tsrg" />
-    <option name="mcpVersion" value="snapshot_20171003-1.12" />
+    <option name="mappingFile" value="C:\Users\botbo.FSOS-MF560LQAAU\.gradle\caches\minecraft\de\oceanlabs\mcp\mcp_snapshot\20171003\1.12.2\srgs\mcp-srg.srg" />
+    <option name="mcpVersion" value="snapshot_20171003" />
     <option name="minecraftVersion" value="1.12.2" />
-    <option name="platformVersion" value="14.23.5.2859" />
-    <option name="srgType" value="TSRG" />
+    <option name="srgType" value="SRG" />
   </component>
 </module>

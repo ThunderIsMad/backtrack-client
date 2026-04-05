@@ -15,11 +15,11 @@ public class MixinPlayerControllerMP {
     private void onGetBlockReachDistance(CallbackInfoReturnable<Float> cir) {
         SoloBacktrack mod = SoloBacktrack.getInstance();
         if (mod == null) return;
-
         mod.getModuleManager().getModules().stream()
-            .filter(m -> m instanceof ReachModule && m.isEnabled())
-            .map(m -> (ReachModule) m)
-            .findFirst()
-            .ifPresent(reach -> cir.setReturnValue((float) reach.getReachValue()));
+                .filter(m -> m instanceof ReachModule && m.isEnabled())
+                .map(m -> (ReachModule) m)
+                .findFirst()
+                .ifPresent(reach -> cir.setReturnValue((float) reach.getReachValue()));
     }
+
 }

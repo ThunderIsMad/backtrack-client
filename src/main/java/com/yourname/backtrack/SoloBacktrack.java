@@ -40,27 +40,20 @@ public class SoloBacktrack {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         instance = this;
-
         moduleManager = new ModuleManager();
-
         hudSettings = new HudSettings();
         configManager = new ConfigManager();
         guiTheme = new GuiTheme();
-
 
         configManager.loadHudSettings(hudSettings);
         configManager.loadModuleKeybinds(moduleManager);
         configManager.loadModuleSettings(moduleManager);
         configManager.loadModuleHudSettings(moduleManager);
-        configManager.loadBacktrackInfoPosition(moduleManager);
         configManager.loadModuleStates(moduleManager);
-
 
         MinecraftForge.EVENT_BUS.register(new KeybindHandler(moduleManager, configManager));
         MinecraftForge.EVENT_BUS.register(new HudRenderer(moduleManager, hudSettings));
         MinecraftForge.EVENT_BUS.register(new HudControlHandler(hudSettings, configManager));
         MinecraftForge.EVENT_BUS.register(new GuiOpener(moduleManager, configManager, hudSettings, guiTheme));
-        MinecraftForge.EVENT_BUS.register(new ControllerInjector(moduleManager));
     }
 }
-

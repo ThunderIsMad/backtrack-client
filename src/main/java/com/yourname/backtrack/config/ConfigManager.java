@@ -4,7 +4,6 @@ import com.yourname.backtrack.gui.GuiTheme;
 import com.yourname.backtrack.hud.HudSettings;
 import com.yourname.backtrack.module.Module;
 import com.yourname.backtrack.module.ModuleHudSettings;
-import com.yourname.backtrack.module.impl.BacktrackModule;
 import com.yourname.backtrack.setting.BooleanSetting;
 import com.yourname.backtrack.setting.ModeSetting;
 import com.yourname.backtrack.setting.NumberSetting;
@@ -28,7 +27,7 @@ public class ConfigManager {
         file = new File(configDir, "solobacktrack.properties");
     }
 
-    // ─── GUI position ────────────────────────────────────────────────────────
+    // --- GUI position ---
 
     public int loadGuiX() {
         return parseInt(loadProperties().getProperty("gui.x"), 20);
@@ -45,7 +44,7 @@ public class ConfigManager {
         saveProperties(p);
     }
 
-    // ─── HUD settings ────────────────────────────────────────────────────────
+    // --- HUD settings ---
 
     public void saveHudSettings(HudSettings hudSettings) {
         Properties p = loadProperties();
@@ -74,7 +73,7 @@ public class ConfigManager {
         hudSettings.setTextMode(parseInt(p.getProperty("hud.textMode"), 1));
     }
 
-    // ─── Module states (enabled/disabled) ───────────────────────────────────
+    // --- Module states ---
 
     public void saveModuleStates(ModuleManager mm) {
         Properties p = loadProperties();
@@ -94,7 +93,7 @@ public class ConfigManager {
         }
     }
 
-    // ─── Module keybinds ─────────────────────────────────────────────────────
+    // --- Module keybinds ---
 
     public void loadModuleKeybinds(ModuleManager mm) {
         Properties p = loadProperties();
@@ -104,7 +103,7 @@ public class ConfigManager {
         }
     }
 
-    // ─── Module settings (BooleanSetting, NumberSetting, ModeSetting) ────────
+    // --- Module settings ---
 
     public void saveModuleSettings(ModuleManager mm) {
         Properties p = loadProperties();
@@ -149,7 +148,7 @@ public class ConfigManager {
         }
     }
 
-    // ─── Module HUD settings ─────────────────────────────────────────────────
+    // --- Module HUD settings ---
 
     public void saveModuleHudSettings(ModuleManager mm) {
         Properties p = loadProperties();
@@ -182,34 +181,7 @@ public class ConfigManager {
         }
     }
 
-    // ─── Backtrack info position ──────────────────────────────────────────────
-
-    public void saveBacktrackInfoPosition(ModuleManager mm) {
-        Properties p = loadProperties();
-        for (Module module : mm.getModules()) {
-            if (module instanceof BacktrackModule) {
-                BacktrackModule bt = (BacktrackModule) module;
-                p.setProperty("backtrack.info.x", String.valueOf(bt.getInfoX()));
-                p.setProperty("backtrack.info.y", String.valueOf(bt.getInfoY()));
-                break;
-            }
-        }
-        saveProperties(p);
-    }
-
-    public void loadBacktrackInfoPosition(ModuleManager mm) {
-        Properties p = loadProperties();
-        for (Module module : mm.getModules()) {
-            if (module instanceof BacktrackModule) {
-                BacktrackModule bt = (BacktrackModule) module;
-                bt.setInfoX(parseInt(p.getProperty("backtrack.info.x"), 0));
-                bt.setInfoY(parseInt(p.getProperty("backtrack.info.y"), 0));
-                break;
-            }
-        }
-    }
-
-    // ─── saveAll / loadAll (convenience wrappers) ────────────────────────────
+    // --- saveAll / loadAll ---
 
     public void saveAll(ModuleManager mm, HudSettings hudSettings, GuiTheme theme, int guiX, int guiY) {
         Properties p = loadProperties();
@@ -223,7 +195,6 @@ public class ConfigManager {
         saveModuleStates(mm);
         saveModuleSettings(mm);
         saveModuleHudSettings(mm);
-        saveBacktrackInfoPosition(mm);
     }
 
     public void loadAll(ModuleManager mm, HudSettings hudSettings, GuiTheme theme) {
@@ -236,10 +207,9 @@ public class ConfigManager {
         loadModuleKeybinds(mm);
         loadModuleSettings(mm);
         loadModuleHudSettings(mm);
-        loadBacktrackInfoPosition(mm);
     }
 
-    // ─── Internal helpers ─────────────────────────────────────────────────────
+    // --- Internal helpers ---
 
     private Properties loadProperties() {
         if (cachedProperties != null) return cachedProperties;
