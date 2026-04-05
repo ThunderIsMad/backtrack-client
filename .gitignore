@@ -1,50 +1,50 @@
 ```
+# Build artifacts
+build/
+target/
+
 # Dependencies
 .gradle/
 node_modules/
+venv/
+.venv/
+__pycache__/
+*.egg-info/
 
-# Build artifacts
-build/
-dist/
-target/
+# Logs and temp files
+*.log
+*.tmp
+
+# Environment
+.env
+.env.local
+*.env.*
+
+# Editors
+.vscode/
+.idea/
 
 # Python
-__pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
-env/
-venv/
-.venv/
-.ENV
-.env
-
-# Logs
-*.log
-
-# IDE
-.vscode/
-.idea/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Coverage
+__pycache__/
+*.so
 .coverage
 coverage/
 htmlcov/
 
-# Compressed
-*.zip
-*.gz
-*.tar
-*.tgz
-*.bz2
-*.xz
-*.7z
-*.rar
+# Java
+*.class
+*.jar
+*.war
+*.ear
+hs_err_pid*
+
+# General
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
 ```
