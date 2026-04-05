@@ -8,8 +8,8 @@ import org.lwjgl.input.Keyboard;
 public class VelocityModule extends Module {
 
     private final NumberSetting horizontal = new NumberSetting("Horizontal", 100, 0, 100, 1);
-    private final NumberSetting vertical   = new NumberSetting("Vertical",   100, 0, 100, 1);
-    private final NumberSetting chance     = new NumberSetting("Chance",     100, 0, 100, 1);
+    private final NumberSetting vertical = new NumberSetting("Vertical", 100, 0, 100, 1);
+    private final NumberSetting chance = new NumberSetting("Chance", 100, 0, 100, 1);
 
     public VelocityModule() {
         super("Velocity", Category.COMBAT, Keyboard.KEY_NONE);
@@ -18,8 +18,8 @@ public class VelocityModule extends Module {
     }
 
     public double getHorizontal() { return horizontal.getValue(); }
-    public double getVertical()   { return vertical.getValue();   }
-    public double getChance()     { return chance.getValue();     }
+    public double getVertical() { return vertical.getValue(); }
+    public double getChance() { return chance.getValue(); }
 
     @Override
     public String getHudText() {

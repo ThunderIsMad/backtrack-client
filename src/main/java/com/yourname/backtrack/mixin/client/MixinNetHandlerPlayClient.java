@@ -17,8 +17,6 @@ public class MixinNetHandlerPlayClient {
     private void onHandleEntityVelocity(SPacketEntityVelocity packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getMinecraft();
 
-        // Only intercept on main thread — let network thread dispatch happen normally
-        if (!mc.isCallingFromMinecraftThread()) return;
         if (mc.player == null || mc.world == null) return;
         if (packet.getEntityID() != mc.player.getEntityId()) return;
 
@@ -33,18 +31,21 @@ public class MixinNetHandlerPlayClient {
 
         if (vm == null) return;
 
-        // Chance check — if fails, let original packet run unmodified
         if (Math.random() * 100 > vm.getChance()) return;
 
-        double h = 1.0 - vm.getHorizontal() / 100.0;
-        double v = 1.0 - vm.getVertical()   / 100.0;
+        double h = - vm.getHorizontal() / 100.0;
+        double v = - vm.getVertical() / 100.0;
 
-        // Cancel original and apply reduced velocity directly to player
-        mc.player.setVelocity(
-                packet.getMotionX() / 8000.0 * h,
-                packet.getMotionY() / 8000.0 * v,
-                packet.getMotionZ() / 8000.0 * h
-        );
+        // If both are 0% (full cancel), just cancel the packet — no motion to apply
+        if (vm.getHorizontal() == 0 && vm.getVertical() == 0) {
+            ci.cancel();
+            return;
+        }
+
+        // Replace with scaled velocity using MCP 1.12.2 public motion fields
+        mc.player.motionX = packet.getMotionX() / 8000.0 * h;
+        mc.player.motionY = packet.getMotionY() / 8000.0 * v;
+        mc.player.motionZ = packet.getMotionZ() / 8000.0 * h;
         ci.cancel();
     }
 }
