@@ -245,7 +245,13 @@ public class ClickGuiScreen extends GuiScreen {
         Gui.drawRect(x, y, x + 2, y + SET_H,
                 animated(guiTheme.withAlpha(guiTheme.getAccentColor(), hov ? 180 : 70)));
 
-        int maxLeftW = PANEL_W - 60 - 8;
+        String valStr = String.format(Locale.US, "%.1f", ns.getValue());
+        int valWidth = fontRenderer.getStringWidth(valStr);
+        int sliderW = 50;
+        int sliderGap = 4;
+        int rightSectionW = sliderW + sliderGap + valWidth;
+        
+        int maxLeftW = PANEL_W - rightSectionW - 8;
         String label = ns.getName();
         while (label.length() > 1 && fontRenderer.getStringWidth(label) > maxLeftW) {
             label = label.substring(0, label.length() - 1);
@@ -253,9 +259,8 @@ public class ClickGuiScreen extends GuiScreen {
         fontRenderer.drawStringWithShadow(label, x + 5, y + 2,
                 guiTheme.getTextPrimaryColor());
 
-        int sliderX = x + PANEL_W - 55;
+        int sliderX = x + PANEL_W - sliderW - valWidth - sliderGap;
         int sliderY = y + 3;
-        int sliderW = 50;
         int sliderH = SET_H - 6;
 
         double realPct = (ns.getValue() - ns.getMin()) / (ns.getMax() - ns.getMin());
@@ -274,8 +279,7 @@ public class ClickGuiScreen extends GuiScreen {
         Gui.drawRect(sliderX, sliderY, sliderX + fillW, sliderY + sliderH,
                 animated(guiTheme.getAccentColor()));
 
-        String valStr = String.format(Locale.US, "%.1f", ns.getValue());
-        fontRenderer.drawStringWithShadow(valStr, sliderX - 4 - fontRenderer.getStringWidth(valStr),
+        fontRenderer.drawStringWithShadow(valStr, sliderX + sliderW + sliderGap,
                 y + 2, guiTheme.getTextSecondaryColor());
     }
 
@@ -368,9 +372,12 @@ public class ClickGuiScreen extends GuiScreen {
 
             for (Setting s : getMainSettings(mod)) {
                 if (s instanceof NumberSetting) {
-                    int sliderX = x + PANEL_W - 55;
-                    int sliderY = rowY + 3;
+                    String valStr = String.format(Locale.US, "%.1f", ((NumberSetting) s).getValue());
+                    int valWidth = fontRenderer.getStringWidth(valStr);
                     int sliderW = 50;
+                    int sliderGap = 4;
+                    int sliderX = x + PANEL_W - sliderW - valWidth - sliderGap;
+                    int sliderY = rowY + 3;
                     int sliderH = SET_H - 6;
                     if (isHov(sliderX, sliderY, sliderW, sliderH, mouseX, mouseY)) {
                         if (btn == 0) {
