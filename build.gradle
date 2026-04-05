@@ -34,7 +34,7 @@ group = 'com.yourname.backtrack'
 archivesBaseName = 'Backtrack'
 sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8' // Need this here so eclipse task generates correctly.
 minecraft {
-    version = "1.12.2-14.23.5.2859"
+    version = "1.12.2-14.23.5.2847"
     runDir = "run"
     mappings = "snapshot_20171003"
     makeObfSourceJar = false
@@ -52,7 +52,6 @@ repositories {
     mavenCentral()
 }
 dependencies {
-    minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2859'
     shadow('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
         exclude module: 'launchwrapper'
         exclude module: 'guava'
