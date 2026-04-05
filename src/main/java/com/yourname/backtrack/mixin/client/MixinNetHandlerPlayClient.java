@@ -34,7 +34,7 @@ public class MixinNetHandlerPlayClient {
         if (Math.random() * 100 > vm.getChance()) return;
 
         double h = - vm.getHorizontal() / 100.0;
-        double v = - vm.getVertical() / 100.0;git
+        double v = - vm.getVertical() / 100.0;gitg
 
         // If both are 0% (full cancel), just cancel the packet — no motion to apply
         if (vm.getHorizontal() == 0 && vm.getVertical() == 0) {
