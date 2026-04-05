@@ -33,12 +33,12 @@ public class ClickGuiScreen extends GuiScreen {
     private final long           openTime;
 
     // Vape V4 Minimal Design Constants
-    private static final int PANEL_W   = 120;
+    private static final int PANEL_W   = 150;
     private static final int PANEL_GAP = 8;
     private static final int HEADER_H  = 16;
     private static final int MOD_H     = 14;
     private static final int SET_H     = 12;
-    private static final int ROW_GAP   = 2;
+    private static final int ROW_GAP   = 4;
     private static final int MAX_VIS_H = 240;
     
     // Color Palette - Vape V4 Minimal
@@ -46,8 +46,10 @@ public class ClickGuiScreen extends GuiScreen {
     private static final int COLOR_HOVER     = 0xFF1C1C1C;  // rgb(28, 28, 28)
     private static final int COLOR_OUTLINE   = 0xFF232323;  // rgb(35, 35, 35)
     private static final int COLOR_ACCENT    = 0xFF4DA3FF;  // rgb(77, 163, 255)
-    private static final int COLOR_SLIDER_BG = 0xFF1E1E1E;  // rgb(30, 30, 30)
+    private static final int COLOR_SLIDER_BG = 0xFF282828;  // rgb(40, 40, 40)
     private static final int COLOR_TEXT      = 0xFFD2D2D2;  // rgb(210, 210, 210)
+    private static final int COLOR_TEXT_MOD  = 0xFFE1E1E1;  // rgb(225, 225, 225)
+    private static final int COLOR_TEXT_SET  = 0xFFBEBEBE;  // rgb(190, 190, 190)
     private static final int COLOR_HEADER    = 0xFF181818;  // rgb(24, 24, 24)
 
     private final List<Panel> panels = new ArrayList<>();
@@ -140,10 +142,11 @@ public class ClickGuiScreen extends GuiScreen {
                 x + PANEL_W - 8, y + 4,
                 withAlpha(COLOR_TEXT, 120));
 
-        // Thin 2px accent underline below header text
+        // Thin 2px accent underline below header text (60% width, centered)
         int textWidth = fontRenderer.getStringWidth(catName);
-        int underlineX = x + PANEL_W / 2 - textWidth / 2;
-        Gui.drawRect(underlineX, y + HEADER_H - 2, underlineX + textWidth, y + HEADER_H,
+        int underlineWidth = (int)(PANEL_W * 0.6);
+        int underlineX = x + PANEL_W / 2 - underlineWidth / 2;
+        Gui.drawRect(underlineX, y + HEADER_H - 2, underlineX + underlineWidth, y + HEADER_H,
                 panel.collapsed ? COLOR_OUTLINE : COLOR_ACCENT);
 
         if (panel.collapsed) {
@@ -181,10 +184,15 @@ public class ClickGuiScreen extends GuiScreen {
                   : withAlpha(COLOR_BG, 255);
         Gui.drawRect(x, y, x + PANEL_W, y + MOD_H, animated(bg));
 
+        // Subtle left accent indicator (1px) for enabled modules
+        if (mod.isEnabled()) {
+            Gui.drawRect(x, y, x + 1, y + MOD_H, COLOR_ACCENT);
+        }
+
         // Enabled indicator - subtle accent text, no blue bar
         int textColor = mod.isEnabled() ? COLOR_ACCENT
-                : expanded        ? COLOR_TEXT
-                  : withAlpha(COLOR_TEXT, 180);
+                : expanded        ? COLOR_TEXT_MOD
+                  : withAlpha(COLOR_TEXT_MOD, 180);
         
         // 6px left padding for clean alignment
         fontRenderer.drawStringWithShadow(mod.getName(), x + 6, y + 3, animated(textColor));
@@ -242,7 +250,7 @@ public class ClickGuiScreen extends GuiScreen {
             label = label.substring(0, label.length() - 1);
         }
         // 6px left padding
-        fontRenderer.drawStringWithShadow(label, x + 6, y + 2, COLOR_TEXT);
+        fontRenderer.drawStringWithShadow(label, x + 6, y + 2, COLOR_TEXT_SET);
 
         if (right != null && !right.isEmpty()) {
             int rw = fontRenderer.getStringWidth(right);
@@ -276,7 +284,7 @@ public class ClickGuiScreen extends GuiScreen {
             label = label.substring(0, label.length() - 1);
         }
         // 6px left padding
-        fontRenderer.drawStringWithShadow(label, x + 6, y + 2, COLOR_TEXT);
+        fontRenderer.drawStringWithShadow(label, x + 6, y + 2, COLOR_TEXT_SET);
 
         int sliderX = x + PANEL_W - sliderW - valWidth - sliderGap;
         int sliderY = y + SET_H / 2 - 2;  // Center the 4px slider vertically
@@ -302,7 +310,7 @@ public class ClickGuiScreen extends GuiScreen {
 
         // Right-aligned value text
         fontRenderer.drawStringWithShadow(valStr, sliderX + sliderW + sliderGap,
-                y + 2, withAlpha(COLOR_TEXT, 140));
+                y + 2, COLOR_TEXT);
     }
 
     @Override
