@@ -2,7 +2,10 @@ buildscript {
     repositories {
         maven { url = 'https://maven.minecraftforge.net/' }
         mavenCentral()
-        maven { url 'https://repo.spongepowered.org/maven' }
+        maven {
+            name = "SpongePowered"
+            url = "https://repo.spongepowered.org/maven"
+        }
     }
     dependencies {
         classpath 'net.minecraftforge.gradle:ForgeGradle:3.+'
@@ -62,7 +65,7 @@ dependencies {
     // The userdev artifact is a special name and will get all sorts of transformations applied to it.
     minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2859'
 
-    implementation('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
+    compile('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
         exclude module: 'launchwrapper'
         exclude module: 'guava'
         exclude module: 'gson'
