@@ -10,10 +10,15 @@ buildscript {
             name = "SpongePowered"
             url = "https://repo.spongepowered.org/repository/maven-public/"
         }
+        maven {
+            name = "gradle-plugins"
+            url = "https://plugins.gradle.org/m2/"
+        }
     }
     dependencies {
         classpath 'net.minecraftforge.gradle:ForgeGradle:2.3-SNAPSHOT'
         classpath 'org.spongepowered:mixingradle:0.4-SNAPSHOT'
+        classpath 'com.github.jengelman.gradle.plugins:shadow:2.0.4'
     }
 }
         
@@ -23,6 +28,7 @@ apply plugin: 'org.spongepowered.mixin'
 apply plugin: 'eclipse'
 apply plugin: 'maven-publish'
 apply plugin: 'java'
+apply plugin: 'com.github.johnrengelman.shadow'
 
 version = '1.0'
 group = 'com.yourname.modid' // http://maven.apache.org/guides/mini/guide-naming-conventions.html
@@ -56,7 +62,7 @@ dependencies {
     // The userdev artifact is a special name and will get all sorts of transformations applied to it.
     minecraft 'net.minecraftforge:forge:1.12.2-14.23.5.2859'
 
-    compile('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
+    shadow('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
         exclude module: 'launchwrapper'
         exclude module: 'guava'
         exclude module: 'gson'
@@ -70,25 +76,27 @@ mixin {
 }
 
 // Example for how to get properties into the manifest for reading by the runtime..
-jar {
+shadowJar {
+    configurations = [project.configurations.shadow]
+    classifier = ''
     manifest {
         attributes([
-            "Specification-Title": "examplemod",
-            "Specification-Vendor": "examplemodsareus",
-            "Specification-Version": "1", // We are version 1 of ourselves
-            "Implementation-Title": project.name,
-            "Implementation-Version": "${version}",
-            "Implementation-Vendor" :"examplemodsareus",
-            "Implementation-Timestamp": new Date().format("yyyy-MM-dd'T'HH:mm:ssZ")
+            "Specification-Title"      : "Backtrack",
+            "Specification-Vendor"     : "yourname",
+            "Specification-Version"    : "1",
+            "Implementation-Title"     : project.name,
+            "Implementation-Version"   : "${version}",
+            "Implementation-Vendor"    : "yourname",
+            "Implementation-Timestamp" : new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+            "TweakClass"               : "org.spongepowered.asm.launch.MixinTweaker",
+            "MixinConfigs"             : "mixins.backtrack.json",
+            "ForceLoadAsMod"           : true
         ])
     }
 }
 
-// Example configuration to allow publishing using the maven-publish task
-// This is the preferred method to reobfuscate your jar file
-jar.finalizedBy('reobfJar') 
-// However if you are in a multi-project build, dev time needs unobfed jar files, so you can delay the obfuscation until publishing by doing
-//publish.dependsOn('reobfJar')
+reobfJar.dependsOn shadowJar
+jar.finalizedBy('reobfJar')
 
 publishing {
     publications {
