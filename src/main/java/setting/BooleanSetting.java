@@ -27,3 +27,4 @@ public class BooleanSetting extends Setting {
         this.value = !this.value;
     }
 }
+

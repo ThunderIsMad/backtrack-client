@@ -9,7 +9,7 @@ import com.yourname.backtrack.setting.BooleanSetting;
 import com.yourname.backtrack.setting.ModeSetting;
 import com.yourname.backtrack.setting.NumberSetting;
 import com.yourname.backtrack.setting.Setting;
-import module.ModuleManager;
+import com.yourname.backtrack.module.ModuleManager;
 import net.minecraft.client.Minecraft;
 
 import java.io.*;

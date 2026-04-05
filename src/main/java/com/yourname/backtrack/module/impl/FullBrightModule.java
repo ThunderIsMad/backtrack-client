@@ -85,3 +85,4 @@ public class FullBrightModule extends Module {
         }
     }
 }
+

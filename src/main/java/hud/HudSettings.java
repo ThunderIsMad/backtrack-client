@@ -197,3 +197,4 @@ public class HudSettings {
         textMode = TEXT_MODE_NAME_STATUS;
     }
 }
+

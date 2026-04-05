@@ -3,7 +3,7 @@ package com.yourname.backtrack.gui;
 import com.yourname.backtrack.config.ConfigManager;
 import com.yourname.backtrack.module.Module;
 import com.yourname.backtrack.module.ModuleHudSettings;
-import module.ModuleManager;
+import com.yourname.backtrack.module.ModuleManager;
 import net.minecraft.client.gui.Gui;
 import net.minecraft.client.gui.GuiScreen;
 import org.lwjgl.input.Keyboard;
@@ -162,3 +162,4 @@ public class HudEditorScreen extends GuiScreen {
         super.onGuiClosed();
     }
 }
+

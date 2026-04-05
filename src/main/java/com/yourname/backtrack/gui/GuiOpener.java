@@ -2,7 +2,7 @@ package com.yourname.backtrack.gui;
 
 import com.yourname.backtrack.config.ConfigManager;
 import com.yourname.backtrack.hud.HudSettings;
-import module.ModuleManager;
+import com.yourname.backtrack.module.ModuleManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
@@ -36,3 +36,4 @@ public class GuiOpener {
         }
     }
 }
+

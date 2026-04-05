@@ -5,3 +5,4 @@ public enum SettingGroup {
     HUDTEXT,
     DEBUG_WINDOW
 }
+
