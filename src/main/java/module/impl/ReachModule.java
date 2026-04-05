@@ -7,21 +7,21 @@ import org.lwjgl.input.Keyboard;
 
 public class ReachModule extends Module {
 
-    private final NumberSetting reach = new NumberSetting(
-            "Reach", 3.5, 3.0, 6.0, 0.1);
+    private final NumberSetting distance = new NumberSetting(
+            "Reach", 6.0, 3.0, 10.0, 0.1);
 
     public ReachModule() {
         super("Reach", Category.COMBAT, Keyboard.KEY_NONE);
-        addSettings(reach);
+        addSettings(distance);
         addHudSettings();
     }
 
     public double getReachValue() {
-        return reach.getValue();
+        return distance.getValue();
     }
 
     @Override
     public String getHudText() {
-        return String.format("Reach %.1f", reach.getValue());
+        return String.format("Reach %.1f", distance.getValue());
     }
 }

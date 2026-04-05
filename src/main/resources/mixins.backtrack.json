@@ -1,0 +1,9 @@
+{
+  "package": "com.yourname.backtrack.mixin",
+  "refmap": "mixins.backtrack.refmap.json",
+  "minVersion": "0.7",
+  "compatibilityLevel": "JAVA_8",
+  "client": [
+    "client.MixinPlayerControllerMP"
+  ]
+}

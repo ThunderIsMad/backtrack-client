@@ -1,25 +1,70 @@
-# eclipse
-bin
-*.launch
-.settings
-.metadata
-.classpath
-.project
+```
+# Compiled and build artifacts
+*.class
+*.o
+*.obj
+*.exe
+*.dll
+*.so
+*.a
+*.out
+*.pyc
+__pycache__/
 
-# idea
-out
-*.ipr
-*.iws
-*.iml
-.idea
+# Dependencies
+node_modules/
+venv/
+.venv/
+.gradle/
+target/
+dist/
+build/
 
-# gradle
-build
-.gradle
+# Cache directories
+.mypy_cache/
+.pytest_cache/
+.julia/
+.zig/
 
-# other
-eclipse
-run
+# Editor/IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.tmp
 
-# Files from Forge MDK
-forge*changelog.txt
+# System files
+.DS_Store
+Thumbs.db
+.env
+.env.local
+*.env.*
+
+# Logs
+*.log
+
+# Coverage
+coverage/
+htmlcov/
+.coverage
+
+# Compressed files
+*.zip
+*.gz
+*.tar
+*.tgz
+*.bz2
+*.xz
+*.7z
+*.rar
+*.zst
+*.lz4
+*.lzh
+*.cab
+*.arj
+*.rpm
+*.deb
+*.Z
+*.lz
+*.lzo
+```
