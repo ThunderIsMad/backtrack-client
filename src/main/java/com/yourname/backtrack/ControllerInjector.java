@@ -1,6 +1,6 @@
 package com.yourname.backtrack;
 
-import module.ModuleManager;
+import com.yourname.backtrack.module.ModuleManager;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent;

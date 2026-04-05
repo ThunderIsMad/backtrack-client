@@ -57,3 +57,4 @@ public class NumberSetting extends Setting {
         return increment;
     }
 }
+

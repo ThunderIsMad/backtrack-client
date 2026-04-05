@@ -4,7 +4,7 @@ import com.yourname.backtrack.config.ConfigManager;
 import com.yourname.backtrack.hud.HudSettings;
 import com.yourname.backtrack.module.Category;
 import com.yourname.backtrack.module.Module;
-import module.ModuleManager;
+import com.yourname.backtrack.module.ModuleManager;
 import com.yourname.backtrack.module.impl.BacktrackModule;
 import com.yourname.backtrack.setting.ActionSetting;
 import com.yourname.backtrack.setting.BooleanSetting;
@@ -532,7 +532,7 @@ public class ClickGuiScreen extends GuiScreen {
         List<Setting> result = new ArrayList<>();
         for (Setting s : mod.getSettings()) {
             if (s.getGroup() != SettingGroup.HUDTEXT
-                    && s.getGroup() != SettingGroup.DEBUGWINDOW) {
+                    && s.getGroup() != SettingGroup.DEBUG_WINDOW) {
                 result.add(s);
             }
         }
@@ -620,3 +620,4 @@ public class ClickGuiScreen extends GuiScreen {
     @Override
     public boolean doesGuiPauseGame() { return false; }
 }
+

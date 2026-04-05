@@ -1,6 +1,6 @@
 package com.yourname.backtrack;
 
-import module.ModuleManager;
+import com.yourname.backtrack.module.ModuleManager;
 import com.yourname.backtrack.module.impl.ReachModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerControllerMP;

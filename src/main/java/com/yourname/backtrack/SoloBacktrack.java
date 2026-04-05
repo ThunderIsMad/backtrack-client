@@ -7,7 +7,7 @@ import com.yourname.backtrack.hud.HudControlHandler;
 import com.yourname.backtrack.hud.HudRenderer;
 import com.yourname.backtrack.hud.HudSettings;
 import com.yourname.backtrack.input.KeybindHandler;
-import module.ModuleManager;
+import com.yourname.backtrack.module.ModuleManager;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
@@ -63,3 +63,4 @@ public class SoloBacktrack {
         MinecraftForge.EVENT_BUS.register(new ControllerInjector(moduleManager));
     }
 }
+
