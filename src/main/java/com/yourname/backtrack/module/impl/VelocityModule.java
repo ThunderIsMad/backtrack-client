@@ -23,7 +23,7 @@ public class VelocityModule extends Module {
             Arrays.asList("Normal", "Cancel", "Reverse", "JumpReset", "Legit"),
             "Normal"
     );
-    private final NumberSetting  horizontal = new NumberSetting("Horizontal", 100, 0, 100, 1);
+    private final NumberSetting  horizontal = new NumberSetting("Horizontal", 52, 0, 100, 1);
     private final NumberSetting  vertical   = new NumberSetting("Vertical",   100, 0, 100, 1);
     private final NumberSetting  chance     = new NumberSetting("Chance",     100, 0, 100, 1);
     private final BooleanSetting debug      = new BooleanSetting("Debug", false);
