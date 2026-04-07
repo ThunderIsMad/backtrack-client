@@ -32,9 +32,11 @@ public class VelocityModule extends Module {
     private final BooleanSetting debug      = new BooleanSetting("Debug", false);
 
     // GroundStrafe state
-    private volatile boolean pendingStrafe = false;
-    private volatile double  strafeYaw     = 0.0;
-    private boolean          registered    = false;
+    private volatile boolean pendingStrafe  = false;
+    private volatile double  strafeYaw      = 0.0;
+    private volatile double  pendingRawX    = 0.0;
+    private volatile double  pendingRawZ    = 0.0;
+    private boolean          registered     = false;
 
     private volatile double lastRawX, lastRawY, lastRawZ;
     private volatile double lastAppliedX, lastAppliedY, lastAppliedZ;
@@ -73,6 +75,8 @@ public class VelocityModule extends Module {
      */
     public void notifyKnockback(double rawX, double rawZ) {
         if (Math.sqrt(rawX * rawX + rawZ * rawZ) < 0.001) return;
+        pendingRawX   = rawX;
+        pendingRawZ   = rawZ;
         strafeYaw     = Math.toDegrees(Math.atan2(-rawX, -rawZ));
         pendingStrafe = true;
     }
@@ -92,9 +96,23 @@ public class VelocityModule extends Module {
 
         double strength = (horizontal.getValue() / 100.0) * 0.18;
         double yawRad   = Math.toRadians(strafeYaw);
+        double impulseX = Math.sin(yawRad) * strength;
+        double impulseZ = -Math.cos(yawRad) * strength;
 
-        mc.player.motionX += Math.sin(yawRad) * strength;
-        mc.player.motionZ -= Math.cos(yawRad) * strength;
+        mc.player.motionX += impulseX;
+        mc.player.motionZ += impulseZ;
+
+        if (debug.getValue() && logWriter != null) {
+            double rawH     = Math.sqrt(pendingRawX * pendingRawX + pendingRawZ * pendingRawZ);
+            double impulseH = Math.sqrt(impulseX * impulseX + impulseZ * impulseZ);
+            String line = String.format("[%s] GS KB-H: %.4f  impulse: %.4f (%.0f%%)  yaw: %.1f",
+                    TIME_FMT.format(new Date()),
+                    rawH, impulseH,
+                    rawH > 0.0001 ? (impulseH / rawH) * 100 : 0,
+                    strafeYaw);
+            logWriter.println(line);
+            logWriter.flush();
+        }
     }
 
     public String getMode()       { return mode.getValue(); }
