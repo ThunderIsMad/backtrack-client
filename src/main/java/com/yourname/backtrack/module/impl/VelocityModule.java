@@ -20,13 +20,17 @@ public class VelocityModule extends Module {
 
     private final ModeSetting   mode       = new ModeSetting(
             "Mode",
-            Arrays.asList("Normal", "Cancel", "Reverse", "JumpReset", "Legit"),
+            Arrays.asList("Normal", "Cancel", "Reverse", "JumpReset", "Legit", "GroundStrafe"),
             "Normal"
     );
     private final NumberSetting  horizontal = new NumberSetting("Horizontal", 52, 0, 100, 1);
     private final NumberSetting  vertical   = new NumberSetting("Vertical",   100, 0, 100, 1);
     private final NumberSetting  chance     = new NumberSetting("Chance",     100, 0, 100, 1);
     private final BooleanSetting debug      = new BooleanSetting("Debug", false);
+
+    // GroundStrafe state: direction to strafe against, set when KB packet arrives
+    private volatile boolean pendingStrafe = false;
+    private volatile double  strafeYaw     = 0.0;
 
     private volatile double lastRawX, lastRawY, lastRawZ;
     private volatile double lastAppliedX, lastAppliedY, lastAppliedZ;
@@ -47,7 +51,46 @@ public class VelocityModule extends Module {
 
     @Override
     public void onDisable() {
+        pendingStrafe = false;
         closeLog();
+    }
+
+    /**
+     * Called by the mixin when a velocity packet arrives in GroundStrafe mode.
+     * Stores the incoming KB direction so onUpdate can counter-strafe on the
+     * next ground tick — no motion fields are touched here.
+     */
+    public void notifyKnockback(double rawX, double rawZ) {
+        if (Math.sqrt(rawX * rawX + rawZ * rawZ) < 0.001) return;
+        // Yaw of the KB vector — we will strafe in the opposite direction
+        strafeYaw     = Math.toDegrees(Math.atan2(-rawX, -rawZ));
+        pendingStrafe = true;
+    }
+
+    /**
+     * Called every client tick from the module's onUpdate.
+     * If a strafe is pending and the player is on the ground,
+     * applies a counter-strafe impulse scaled by the horizontal setting.
+     */
+    @Override
+    public void onUpdate() {
+        if (!isEnabled()) return;
+        if (!"GroundStrafe".equals(mode.getValue())) return;
+        if (!pendingStrafe) return;
+
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.player == null || mc.world == null) return;
+        if (!mc.player.onGround) return;
+
+        pendingStrafe = false;
+
+        double strength = (horizontal.getValue() / 100.0) * 0.18;
+        double yawRad   = Math.toRadians(strafeYaw);
+
+        // Apply counter-strafe: vanilla friction on the ground tick will
+        // naturally absorb this — no direct motionX/Z assignment, just impulse
+        mc.player.motionX += Math.sin(yawRad) * strength;
+        mc.player.motionZ -= Math.cos(yawRad) * strength;
     }
 
     public String getMode()       { return mode.getValue(); }

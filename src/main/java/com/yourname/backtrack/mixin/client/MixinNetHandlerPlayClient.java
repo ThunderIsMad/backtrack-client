@@ -29,6 +29,14 @@ public class MixinNetHandlerPlayClient {
                 .orElse(null);
 
         if (vm == null) return;
+
+        // GroundStrafe: never touch motion here — just notify the module
+        // so it can counter-strafe on the next ground tick naturally.
+        if ("GroundStrafe".equals(vm.getMode())) {
+            vm.notifyKnockback(mc.player.motionX, mc.player.motionZ);
+            return;
+        }
+
         if (Math.random() * 100 > vm.getChance()) return;
 
         double rawX = mc.player.motionX;
@@ -60,13 +68,8 @@ public class MixinNetHandlerPlayClient {
             case "Legit":
             case "Normal":
             default: {
-                // Skip entirely if h is effectively vanilla — nothing to do,
-                // and touching motion at all creates a detectable timing signature.
                 if (h >= 1.0) return;
-
-                // Jitter the multiplier ±8% but never allow amplification above
-                // the raw value (no hJittered > 1.0) and never below 0.
-                double noise = (Math.random() - 0.5) * 0.16;
+                double noise    = (Math.random() - 0.5) * 0.16;
                 double hJittered = Math.max(0.0, Math.min(h, h + noise));
                 appX = rawX * hJittered;
                 appY = rawY * v;
