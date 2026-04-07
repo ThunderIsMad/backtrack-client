@@ -55,7 +55,7 @@ repositories {
 }
 
 dependencies {
-    // compile scope makes the mixin AP available to javac so it generates the refmap
+    // compile scope puts the mixin AP on javac's processor path so it generates the refmap
     compile('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
         exclude module: 'launchwrapper'
         exclude module: 'guava'
@@ -76,11 +76,11 @@ mixin {
     add sourceSets.main, 'mixins.backtrack.refmap.json'
 }
 
-// Copy AP-generated refmap from compileJava output into resources so it lands in the jar.
-// Done in doLast to avoid circular dependency with processResources.
+// The Mixin AP writes the refmap to build/tmp/compileJava/.
+// Copy it into resourcesDir after compilation so it ends up in the jar.
 compileJava.doLast {
     copy {
-        from "${compileJava.destinationDir}/mixins.backtrack.refmap.json"
+        from "${buildDir}/tmp/compileJava/mixins.backtrack.refmap.json"
         into sourceSets.main.output.resourcesDir
     }
 }
