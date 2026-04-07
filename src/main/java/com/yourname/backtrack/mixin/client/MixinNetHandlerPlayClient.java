@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(NetHandlerPlayClient.class)
 public class MixinNetHandlerPlayClient {
 
-    @Inject(method = "handleEntityVelocity", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "handleEntityVelocity", at = @At("TAIL"))
     private void onHandleEntityVelocity(SPacketEntityVelocity packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.player == null || mc.world == null) return;
@@ -31,9 +31,13 @@ public class MixinNetHandlerPlayClient {
         if (vm == null) return;
         if (Math.random() * 100 > vm.getChance()) return;
 
-        double rawX = packet.getMotionX() / 8000.0;
-        double rawY = packet.getMotionY() / 8000.0;
-        double rawZ = packet.getMotionZ() / 8000.0;
+        // Packet has already been applied to motionXYZ by vanilla.
+        // We now READ the current motion (already set) and scale it down.
+        // This way Intave sees the packet was processed — we just quietly
+        // reduce the resulting motion values on the same tick.
+        double rawX = mc.player.motionX;
+        double rawY = mc.player.motionY;
+        double rawZ = mc.player.motionZ;
 
         double h = vm.getHorizontal() / 100.0;
         double v = vm.getVertical()   / 100.0;
@@ -52,16 +56,16 @@ public class MixinNetHandlerPlayClient {
                 break;
             }
             case "JumpReset": {
-                appX =  rawX * h;
-                appY =  0.42;
-                appZ =  rawZ * h;
+                appX = rawX * h;
+                appY = 0.42;
+                appZ = rawZ * h;
                 break;
             }
             case "Legit":
             case "Normal":
             default: {
                 appX = rawX * h;
-                appY = rawY;
+                appY = rawY * v;
                 appZ = rawZ * h;
                 break;
             }
@@ -70,7 +74,6 @@ public class MixinNetHandlerPlayClient {
         mc.player.motionX = appX;
         mc.player.motionY = appY;
         mc.player.motionZ = appZ;
-        ci.cancel();
 
         vm.recordPacket(rawX, rawY, rawZ, appX, appY, appZ);
     }

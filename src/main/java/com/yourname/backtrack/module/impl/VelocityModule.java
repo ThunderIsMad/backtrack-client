@@ -73,7 +73,6 @@ public class VelocityModule extends Module {
                 rawH, appH, pctH,
                 rawY, appY, pctY);
 
-        // Write to file
         if (logWriter != null) {
             logWriter.println(line);
             logWriter.flush();
@@ -85,7 +84,6 @@ public class VelocityModule extends Module {
             File logDir  = new File(Minecraft.getMinecraft().mcDataDir, "logs");
             if (!logDir.exists()) logDir.mkdirs();
             File logFile = new File(logDir, "velocity-debug.log");
-            // Append mode — each session adds to the file
             logWriter = new PrintWriter(new FileWriter(logFile, true));
             String header = String.format(
                     "\n=== Session %s  Mode:%s H:%.0f V:%.0f C:%.0f ===",
@@ -95,7 +93,7 @@ public class VelocityModule extends Module {
             logWriter.println(header);
             logWriter.flush();
         } catch (IOException e) {
-            // silently ignore — no crash if logging fails
+            // silently ignore
         }
     }
 
