@@ -35,13 +35,13 @@ public class MixinNetHandlerPlayClient {
         double rawY = packet.getMotionY() / 8000.0;
         double rawZ = packet.getMotionZ() / 8000.0;
 
-        // h=1.0 -> full vanilla KB added, h=0.0 -> no KB added
+        // H=100 -> full vanilla KB, H=0 -> no KB
         double h = vm.getHorizontal() / 100.0;
+        // V=100 -> full vanilla KB, V=0 -> no KB
         double v = vm.getVertical() / 100.0;
 
         switch (vm.getMode()) {
             case "Cancel": {
-                // Wipe all motion including current — intentional full cancel
                 mc.player.motionX = 0;
                 mc.player.motionY = 0;
                 mc.player.motionZ = 0;
@@ -50,19 +50,17 @@ public class MixinNetHandlerPlayClient {
             }
 
             case "Reverse": {
-                // Keep existing motion, apply reversed packet delta
-                mc.player.motionX += -rawX * h;
-                mc.player.motionY += rawY * v;
-                mc.player.motionZ += -rawZ * h;
+                mc.player.motionX = -rawX * h;
+                mc.player.motionY = rawY * v;
+                mc.player.motionZ = -rawZ * h;
                 ci.cancel();
                 break;
             }
 
             case "JumpReset": {
-                // Keep existing horizontal motion, reduce packet delta, jump
-                mc.player.motionX += rawX * h;
+                mc.player.motionX = rawX * h;
                 mc.player.motionY = 0.42;
-                mc.player.motionZ += rawZ * h;
+                mc.player.motionZ = rawZ * h;
                 ci.cancel();
                 break;
             }
@@ -70,11 +68,11 @@ public class MixinNetHandlerPlayClient {
             case "Legit":
             case "Normal":
             default: {
-                // Preserve existing motion (sprint etc), add only the reduced packet delta.
-                // rawY always applied in full — Intave tracks Y every tick.
-                mc.player.motionX += rawX * h;
-                mc.player.motionY += rawY;
-                mc.player.motionZ += rawZ * h;
+                // motionY always set to full rawY — Intave expects exact Y response.
+                // Reducing Y causes Flight flags. Only horizontal is safe to reduce.
+                mc.player.motionX = rawX * h;
+                mc.player.motionY = rawY;
+                mc.player.motionZ = rawZ * h;
                 ci.cancel();
                 break;
             }
