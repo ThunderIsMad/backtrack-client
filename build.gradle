@@ -23,22 +23,24 @@ buildscript {
 }
 
 apply plugin: 'net.minecraftforge.gradle.forge'
-// Only edit below this line, the above code adds and enables the necessary things for Forge to be setup.
 apply plugin: 'org.spongepowered.mixin'
 apply plugin: 'eclipse'
 apply plugin: 'maven-publish'
 apply plugin: 'java'
 apply plugin: 'com.github.johnrengelman.shadow'
+
 version = '1.0'
 group = 'com.yourname.backtrack'
 archivesBaseName = 'Backtrack'
-sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8' // Need this here so eclipse task generates correctly.
+sourceCompatibility = targetCompatibility = compileJava.sourceCompatibility = compileJava.targetCompatibility = '1.8'
+
 minecraft {
     version = "1.12.2-14.23.5.2847"
     runDir = "run"
     mappings = "snapshot_20171003"
     makeObfSourceJar = false
 }
+
 repositories {
     maven {
         name = "forge"
@@ -51,6 +53,7 @@ repositories {
     jcenter()
     mavenCentral()
 }
+
 dependencies {
     shadow('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
         exclude module: 'launchwrapper'
@@ -59,12 +62,32 @@ dependencies {
         exclude module: 'commons-io'
     }
 }
+
 mixin {
     defaultObfuscationEnv searge
     add sourceSets.main, 'mixins.backtrack.refmap.json'
 }
-// Example for how to get properties into the manifest for reading by the runtime...
+
+// Plain jar: needs TweakClass so reobfJar carries it, and must include the
+// AP-generated refmap from the classes output directory.
+jar {
+    from(sourceSets.main.output) {
+        include 'mixins.backtrack.refmap.json'
+    }
+    manifest {
+        attributes([
+            "TweakClass"    : "org.spongepowered.asm.launch.MixinTweaker",
+            "MixinConfigs"  : "mixins.backtrack.json",
+            "ForceLoadAsMod": true
+        ])
+    }
+}
+
+// Shadow jar merges reobf'd jar + mixin runtime lib.
+// Must depend on reobfJar and pull from its output so class names are obfuscated.
 shadowJar {
+    dependsOn reobfJar
+    from zipTree(reobfJar.archivePath)
     configurations = [project.configurations.shadow]
     classifier = ''
     manifest {
@@ -82,8 +105,9 @@ shadowJar {
         ])
     }
 }
-reobfJar.dependsOn shadowJar
+
 jar.finalizedBy('reobfJar')
+
 publishing {
     publications {
         mavenJava(MavenPublication) {
