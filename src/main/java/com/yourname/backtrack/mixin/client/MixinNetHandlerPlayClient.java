@@ -31,10 +31,6 @@ public class MixinNetHandlerPlayClient {
         if (vm == null) return;
         if (Math.random() * 100 > vm.getChance()) return;
 
-        // Packet has already been applied to motionXYZ by vanilla.
-        // We now READ the current motion (already set) and scale it down.
-        // This way Intave sees the packet was processed — we just quietly
-        // reduce the resulting motion values on the same tick.
         double rawX = mc.player.motionX;
         double rawY = mc.player.motionY;
         double rawZ = mc.player.motionZ;
@@ -64,10 +60,14 @@ public class MixinNetHandlerPlayClient {
             case "Legit":
             case "Normal":
             default: {
-                // Add ±8% noise to the horizontal multiplier so the ratio
-                // is never a fixed constant across packets.
-                double noise = (Math.random() - 0.5) * 0.16; // range: -0.08 to +0.08
-                double hJittered = Math.max(0.0, Math.min(1.0, h + noise));
+                // Skip entirely if h is effectively vanilla — nothing to do,
+                // and touching motion at all creates a detectable timing signature.
+                if (h >= 1.0) return;
+
+                // Jitter the multiplier ±8% but never allow amplification above
+                // the raw value (no hJittered > 1.0) and never below 0.
+                double noise = (Math.random() - 0.5) * 0.16;
+                double hJittered = Math.max(0.0, Math.min(h, h + noise));
                 appX = rawX * hJittered;
                 appY = rawY * v;
                 appZ = rawZ * hJittered;
