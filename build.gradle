@@ -55,6 +55,14 @@ repositories {
 }
 
 dependencies {
+    // compile scope makes the mixin AP available to javac so it generates the refmap
+    compile('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
+        exclude module: 'launchwrapper'
+        exclude module: 'guava'
+        exclude module: 'gson'
+        exclude module: 'commons-io'
+    }
+    // shadow bundles the mixin runtime into the output jar
     shadow('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
         exclude module: 'launchwrapper'
         exclude module: 'guava'
@@ -68,8 +76,8 @@ mixin {
     add sourceSets.main, 'mixins.backtrack.refmap.json'
 }
 
-// Prevent MixinGradle 0.4 from wiring processResources into the classes task graph.
-// Instead, pull the AP-generated refmap directly from the compileJava output dir.
+// Copy AP-generated refmap from compileJava output into resources so it lands in the jar.
+// Done in doLast to avoid circular dependency with processResources.
 compileJava.doLast {
     copy {
         from "${compileJava.destinationDir}/mixins.backtrack.refmap.json"
