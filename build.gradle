@@ -65,12 +65,19 @@ dependencies {
 
 mixin {
     defaultObfuscationEnv searge
+    add sourceSets.main, 'mixins.backtrack.refmap.json'
+}
+
+// Prevent MixinGradle 0.4 from wiring processResources into the classes task graph.
+// Instead, pull the AP-generated refmap directly from the compileJava output dir.
+compileJava.doLast {
+    copy {
+        from "${compileJava.destinationDir}/mixins.backtrack.refmap.json"
+        into sourceSets.main.output.resourcesDir
+    }
 }
 
 jar {
-    from(sourceSets.main.output) {
-        include 'mixins.backtrack.refmap.json'
-    }
     manifest {
         attributes([
             "TweakClass"    : "org.spongepowered.asm.launch.MixinTweaker",
@@ -81,9 +88,6 @@ jar {
 }
 
 shadowJar {
-    from(sourceSets.main.output) {
-        include 'mixins.backtrack.refmap.json'
-    }
     configurations = [project.configurations.shadow]
     classifier = ''
     manifest {
