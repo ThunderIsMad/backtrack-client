@@ -83,11 +83,10 @@ jar {
     }
 }
 
-// Shadow jar merges reobf'd jar + mixin runtime lib.
-// Must depend on reobfJar and pull from its output so class names are obfuscated.
 shadowJar {
-    dependsOn reobfJar
-    from zipTree(reobfJar.archivePath)
+    from(sourceSets.main.output) {
+        include 'mixins.backtrack.refmap.json'
+    }
     configurations = [project.configurations.shadow]
     classifier = ''
     manifest {
@@ -106,6 +105,7 @@ shadowJar {
     }
 }
 
+reobfJar.dependsOn shadowJar
 jar.finalizedBy('reobfJar')
 
 publishing {
