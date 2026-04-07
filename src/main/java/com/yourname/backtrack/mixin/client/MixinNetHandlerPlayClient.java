@@ -35,14 +35,13 @@ public class MixinNetHandlerPlayClient {
         double rawY = packet.getMotionY() / 8000.0;
         double rawZ = packet.getMotionZ() / 8000.0;
 
-        // Always keep full rawY — Intave tracks Y response every tick after knockback.
-        // Reducing Y causes Flight flags and tick-behind flags simultaneously.
-        // Only horizontal reduction is safe against Intave.
-        double h = 1.0 - vm.getHorizontal() / 100.0;
+        // H=100 -> full vanilla KB, H=0 -> no KB
+        double h = vm.getHorizontal() / 100.0;
+        // V=100 -> full vanilla KB, V=0 -> no KB
+        double v = vm.getVertical() / 100.0;
 
         switch (vm.getMode()) {
             case "Cancel": {
-                // Full cancel — will flag Intave but kept for non-Intave servers
                 mc.player.motionX = 0;
                 mc.player.motionY = 0;
                 mc.player.motionZ = 0;
@@ -52,7 +51,7 @@ public class MixinNetHandlerPlayClient {
 
             case "Reverse": {
                 mc.player.motionX = -rawX * h;
-                mc.player.motionY = rawY;
+                mc.player.motionY = rawY * v;
                 mc.player.motionZ = -rawZ * h;
                 ci.cancel();
                 break;
@@ -69,7 +68,7 @@ public class MixinNetHandlerPlayClient {
             case "Legit":
             case "Normal":
             default: {
-                // Apply full Y, reduce X/Z by horizontal setting
+                // Y always stays rawY (V setting ignored) to avoid Intave Flight/tick-behind flags
                 mc.player.motionX = rawX * h;
                 mc.player.motionY = rawY;
                 mc.player.motionZ = rawZ * h;
