@@ -35,47 +35,43 @@ public class MixinNetHandlerPlayClient {
         double rawY = packet.getMotionY() / 8000.0;
         double rawZ = packet.getMotionZ() / 8000.0;
 
-        // H=100 -> full vanilla KB, H=0 -> no KB
         double h = vm.getHorizontal() / 100.0;
-        // V=100 -> full vanilla KB, V=0 -> no KB
-        double v = vm.getVertical() / 100.0;
+        double v = vm.getVertical()   / 100.0;
+
+        double appX, appY, appZ;
 
         switch (vm.getMode()) {
             case "Cancel": {
-                mc.player.motionX = 0;
-                mc.player.motionY = 0;
-                mc.player.motionZ = 0;
-                ci.cancel();
+                appX = 0; appY = 0; appZ = 0;
                 break;
             }
-
             case "Reverse": {
-                mc.player.motionX = -rawX * h;
-                mc.player.motionY = rawY * v;
-                mc.player.motionZ = -rawZ * h;
-                ci.cancel();
+                appX = -rawX * h;
+                appY =  rawY * v;
+                appZ = -rawZ * h;
                 break;
             }
-
             case "JumpReset": {
-                mc.player.motionX = rawX * h;
-                mc.player.motionY = 0.42;
-                mc.player.motionZ = rawZ * h;
-                ci.cancel();
+                appX =  rawX * h;
+                appY =  0.42;
+                appZ =  rawZ * h;
                 break;
             }
-
             case "Legit":
             case "Normal":
             default: {
-                // motionY always set to full rawY — Intave expects exact Y response.
-                // Reducing Y causes Flight flags. Only horizontal is safe to reduce.
-                mc.player.motionX = rawX * h;
-                mc.player.motionY = rawY;
-                mc.player.motionZ = rawZ * h;
-                ci.cancel();
+                appX = rawX * h;
+                appY = rawY;
+                appZ = rawZ * h;
                 break;
             }
         }
+
+        mc.player.motionX = appX;
+        mc.player.motionY = appY;
+        mc.player.motionZ = appZ;
+        ci.cancel();
+
+        vm.recordPacket(rawX, rawY, rawZ, appX, appY, appZ);
     }
 }
