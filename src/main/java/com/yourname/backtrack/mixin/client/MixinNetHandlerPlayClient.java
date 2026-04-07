@@ -13,7 +13,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(NetHandlerPlayClient.class)
 public class MixinNetHandlerPlayClient {
 
-    @Inject(method = "handleEntityVelocity", at = @At("RETURN"))
+    @Inject(method = "handleEntityVelocity", at = @At("HEAD"), cancellable = true)
     private void onHandleEntityVelocity(SPacketEntityVelocity packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.player == null || mc.world == null) return;
@@ -29,54 +29,51 @@ public class MixinNetHandlerPlayClient {
                 .orElse(null);
 
         if (vm == null) return;
-
         if (Math.random() * 100 > vm.getChance()) return;
 
         double rawX = packet.getMotionX() / 8000.0;
         double rawY = packet.getMotionY() / 8000.0;
         double rawZ = packet.getMotionZ() / 8000.0;
 
+        // Always keep full rawY — Intave tracks Y response every tick after knockback.
+        // Reducing Y causes Flight flags and tick-behind flags simultaneously.
+        // Only horizontal reduction is safe against Intave.
+        double h = 1.0 - vm.getHorizontal() / 100.0;
+
         switch (vm.getMode()) {
             case "Cancel": {
+                // Full cancel — will flag Intave but kept for non-Intave servers
                 mc.player.motionX = 0;
                 mc.player.motionY = 0;
                 mc.player.motionZ = 0;
+                ci.cancel();
                 break;
             }
 
             case "Reverse": {
-                double h = vm.getHorizontal() / 100.0;
-                double v = vm.getVertical() / 100.0;
                 mc.player.motionX = -rawX * h;
-                mc.player.motionY = rawY * v;
+                mc.player.motionY = rawY;
                 mc.player.motionZ = -rawZ * h;
+                ci.cancel();
                 break;
             }
 
             case "JumpReset": {
-                double h = 1.0 - vm.getHorizontal() / 100.0;
                 mc.player.motionX = rawX * h;
                 mc.player.motionY = 0.42;
                 mc.player.motionZ = rawZ * h;
+                ci.cancel();
                 break;
             }
 
-            case "Legit": {
-                double h = 1.0 - (vm.getHorizontal() / 100.0) * 0.65;
-                double v = 1.0 - (vm.getVertical() / 100.0) * 0.35;
-                mc.player.motionX = rawX * h;
-                mc.player.motionY = rawY * v;
-                mc.player.motionZ = rawZ * h;
-                break;
-            }
-
+            case "Legit":
             case "Normal":
             default: {
-                double h = 1.0 - vm.getHorizontal() / 100.0;
-                double v = 1.0 - vm.getVertical() / 100.0;
+                // Apply full Y, reduce X/Z by horizontal setting
                 mc.player.motionX = rawX * h;
-                mc.player.motionY = rawY * v;
+                mc.player.motionY = rawY;
                 mc.player.motionZ = rawZ * h;
+                ci.cancel();
                 break;
             }
         }
