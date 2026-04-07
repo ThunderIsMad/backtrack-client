@@ -4,7 +4,7 @@ import setting.SettingGroup;
 
 import java.util.List;
 
-public class ModeSetting extends Setting {
+public class ModeSetting extends com.yourname.backtrack.setting.Setting {
 
     private final List<String> modes;
     private String value;

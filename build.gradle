@@ -68,17 +68,21 @@ mixin {
     add sourceSets.main, 'mixins.backtrack.refmap.json'
 }
 
-// Plain jar: needs TweakClass so reobfJar carries it, and must include the
-// AP-generated refmap from the classes output directory.
+processResources {
+    from(sourceSets.main.output) {
+        include 'mixins.backtrack.refmap.json'
+    }
+}
+
 jar {
     from(sourceSets.main.output) {
         include 'mixins.backtrack.refmap.json'
     }
     manifest {
         attributes([
-            "TweakClass"    : "org.spongepowered.asm.launch.MixinTweaker",
-            "MixinConfigs"  : "mixins.backtrack.json",
-            "ForceLoadAsMod": true
+                "TweakClass"    : "org.spongepowered.asm.launch.MixinTweaker",
+                "MixinConfigs"  : "mixins.backtrack.json",
+                "ForceLoadAsMod": true
         ])
     }
 }
@@ -91,21 +95,29 @@ shadowJar {
     classifier = ''
     manifest {
         attributes([
-            "Specification-Title"      : "Backtrack",
-            "Specification-Vendor"     : "yourname",
-            "Specification-Version"    : "1",
-            "Implementation-Title"     : project.name,
-            "Implementation-Version"   : "${version}",
-            "Implementation-Vendor"    : "yourname",
-            "Implementation-Timestamp" : new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
-            "TweakClass"               : "org.spongepowered.asm.launch.MixinTweaker",
-            "MixinConfigs"             : "mixins.backtrack.json",
-            "ForceLoadAsMod"           : true
+                "Specification-Title"      : "Backtrack",
+                "Specification-Vendor"     : "yourname",
+                "Specification-Version"    : "1",
+                "Implementation-Title"     : project.name,
+                "Implementation-Version"   : "${version}",
+                "Implementation-Vendor"    : "yourname",
+                "Implementation-Timestamp" : new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                "TweakClass"               : "org.spongepowered.asm.launch.MixinTweaker",
+                "MixinConfigs"             : "mixins.backtrack.json",
+                "ForceLoadAsMod"           : true
         ])
     }
 }
 
 reobfJar.dependsOn shadowJar
+jar.finalizedBy('reobfJar')
+
+processResources {
+    from("$buildDir/tmp/compileJava") {
+        include "mixins.backtrack.refmap.json"
+    }
+}
+
 jar.finalizedBy('reobfJar')
 
 publishing {
