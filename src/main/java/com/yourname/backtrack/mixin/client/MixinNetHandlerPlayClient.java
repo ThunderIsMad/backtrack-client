@@ -64,9 +64,13 @@ public class MixinNetHandlerPlayClient {
             case "Legit":
             case "Normal":
             default: {
-                appX = rawX * h;
+                // Add ±8% noise to the horizontal multiplier so the ratio
+                // is never a fixed constant across packets.
+                double noise = (Math.random() - 0.5) * 0.16; // range: -0.08 to +0.08
+                double hJittered = Math.max(0.0, Math.min(1.0, h + noise));
+                appX = rawX * hJittered;
                 appY = rawY * v;
-                appZ = rawZ * h;
+                appZ = rawZ * hJittered;
                 break;
             }
         }
