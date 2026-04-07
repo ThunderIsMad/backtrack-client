@@ -5,6 +5,7 @@ import com.yourname.backtrack.module.impl.VelocityModule;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.network.NetHandlerPlayClient;
 import net.minecraft.network.play.server.SPacketEntityVelocity;
+import net.minecraft.util.text.TextComponentString;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -73,5 +74,12 @@ public class MixinNetHandlerPlayClient {
         ci.cancel();
 
         vm.recordPacket(rawX, rawY, rawZ, appX, appY, appZ);
+
+        if (vm.isDebug()) {
+            String msg = String.format(
+                    "[VelDebug] Raw(%.4f, %.4f, %.4f) -> Got(%.4f, %.4f, %.4f)",
+                    rawX, rawY, rawZ, appX, appY, appZ);
+            mc.player.sendMessage(new TextComponentString(msg));
+        }
     }
 }
