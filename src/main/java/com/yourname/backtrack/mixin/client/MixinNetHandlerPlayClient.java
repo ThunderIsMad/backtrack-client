@@ -76,9 +76,16 @@ public class MixinNetHandlerPlayClient {
         vm.recordPacket(rawX, rawY, rawZ, appX, appY, appZ);
 
         if (vm.isDebug()) {
+            // Calculate horizontal magnitude for cleaner readout
+            double rawH  = Math.sqrt(rawX * rawX + rawZ * rawZ);
+            double appH  = Math.sqrt(appX * appX + appZ * appZ);
+            int pctH = rawH > 0.0001 ? (int) Math.round((appH / rawH) * 100) : 0;
+            int pctY = Math.abs(rawY) > 0.0001 ? (int) Math.round((Math.abs(appY) / Math.abs(rawY)) * 100) : 0;
+
             String msg = String.format(
-                    "[VelDebug] Raw(%.4f, %.4f, %.4f) -> Got(%.4f, %.4f, %.4f)",
-                    rawX, rawY, rawZ, appX, appY, appZ);
+                    "[VelDebug] H: %.4f->%.4f (%d%%)  Y: %.4f->%.4f (%d%%)",
+                    rawH, appH, pctH,
+                    rawY, appY, pctY);
             mc.player.sendMessage(new TextComponentString(msg));
         }
     }
