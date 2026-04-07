@@ -6,6 +6,9 @@ import com.yourname.backtrack.setting.BooleanSetting;
 import com.yourname.backtrack.setting.ModeSetting;
 import com.yourname.backtrack.setting.NumberSetting;
 import net.minecraft.client.Minecraft;
+import net.minecraftforge.common.MinecraftForge;
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
+import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
 
 import java.io.File;
@@ -28,9 +31,10 @@ public class VelocityModule extends Module {
     private final NumberSetting  chance     = new NumberSetting("Chance",     100, 0, 100, 1);
     private final BooleanSetting debug      = new BooleanSetting("Debug", false);
 
-    // GroundStrafe state: direction to strafe against, set when KB packet arrives
+    // GroundStrafe state
     private volatile boolean pendingStrafe = false;
     private volatile double  strafeYaw     = 0.0;
+    private boolean          registered    = false;
 
     private volatile double lastRawX, lastRawY, lastRawZ;
     private volatile double lastAppliedX, lastAppliedY, lastAppliedZ;
@@ -46,34 +50,36 @@ public class VelocityModule extends Module {
 
     @Override
     public void onEnable() {
+        if (!registered) {
+            MinecraftForge.EVENT_BUS.register(this);
+            registered = true;
+        }
         if (debug.getValue()) openLog();
     }
 
     @Override
     public void onDisable() {
+        if (registered) {
+            MinecraftForge.EVENT_BUS.unregister(this);
+            registered = false;
+        }
         pendingStrafe = false;
         closeLog();
     }
 
     /**
      * Called by the mixin when a velocity packet arrives in GroundStrafe mode.
-     * Stores the incoming KB direction so onUpdate can counter-strafe on the
-     * next ground tick — no motion fields are touched here.
+     * Stores the KB direction — no motion fields are touched in the mixin.
      */
     public void notifyKnockback(double rawX, double rawZ) {
         if (Math.sqrt(rawX * rawX + rawZ * rawZ) < 0.001) return;
-        // Yaw of the KB vector — we will strafe in the opposite direction
         strafeYaw     = Math.toDegrees(Math.atan2(-rawX, -rawZ));
         pendingStrafe = true;
     }
 
-    /**
-     * Called every client tick from the module's onUpdate.
-     * If a strafe is pending and the player is on the ground,
-     * applies a counter-strafe impulse scaled by the horizontal setting.
-     */
-    @Override
-    public void onUpdate() {
+    @SubscribeEvent
+    public void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase != TickEvent.Phase.START) return;
         if (!isEnabled()) return;
         if (!"GroundStrafe".equals(mode.getValue())) return;
         if (!pendingStrafe) return;
@@ -87,8 +93,6 @@ public class VelocityModule extends Module {
         double strength = (horizontal.getValue() / 100.0) * 0.18;
         double yawRad   = Math.toRadians(strafeYaw);
 
-        // Apply counter-strafe: vanilla friction on the ground tick will
-        // naturally absorb this — no direct motionX/Z assignment, just impulse
         mc.player.motionX += Math.sin(yawRad) * strength;
         mc.player.motionZ -= Math.cos(yawRad) * strength;
     }
