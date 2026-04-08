@@ -9,8 +9,11 @@ import org.lwjgl.input.Keyboard;
 
 public class JumpResetModule extends Module {
 
-    private int jumpCooldown = 0;
-    private int jumpDelay    = 0;
+    private int jumpCooldown  = 0;
+    // >0: still waiting for delay to expire
+    // -1: delay expired, waiting for onGround (max 8 ticks)
+    private int jumpDelay     = 0;
+    private int groundWait    = 0;
 
     public JumpResetModule() {
         super("JumpReset", Category.COMBAT, Keyboard.KEY_NONE);
@@ -21,6 +24,7 @@ public class JumpResetModule extends Module {
     public void onDisable() {
         jumpCooldown = 0;
         jumpDelay    = 0;
+        groundWait   = 0;
     }
 
     @SubscribeEvent
@@ -30,18 +34,38 @@ public class JumpResetModule extends Module {
 
         if (jumpCooldown > 0) jumpCooldown--;
 
+        // Schedule jump when hit lands
         if (mc.player.hurtTime == 10 && jumpCooldown == 0) {
             WTapModule wtap = getWTap();
             int delay = (wtap != null && wtap.isEnabled()) ? wtap.getConfiguredTicks() + 1 : 0;
-            jumpDelay = delay;
+            if (delay == 0) {
+                // No wtap — try immediately
+                jumpDelay  = 0;
+                groundWait = 8;
+            } else {
+                jumpDelay  = delay;
+                groundWait = 0;
+            }
         }
 
+        // Count down the wtap delay
         if (jumpDelay > 0) {
             jumpDelay--;
-            if (jumpDelay == 0 && mc.player.onGround) {
+            if (jumpDelay == 0) {
+                // Delay done — now wait up to 8 ticks for ground
+                groundWait = 8;
+            }
+        }
+
+        // Once delay is done, fire the jump on the first tick we're on the ground
+        if (groundWait > 0) {
+            if (mc.player.onGround) {
                 mc.player.motionY = 0.42;
                 mc.player.isAirBorne = true;
                 jumpCooldown = 12;
+                groundWait   = 0;
+            } else {
+                groundWait--;
             }
         }
     }
