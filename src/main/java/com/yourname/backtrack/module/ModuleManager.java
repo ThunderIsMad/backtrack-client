@@ -6,6 +6,7 @@ import com.yourname.backtrack.module.impl.FullBrightModule;
 import com.yourname.backtrack.module.impl.KeepSprintModule;
 import com.yourname.backtrack.module.impl.ReachModule;
 import com.yourname.backtrack.module.impl.VelocityModule;
+import com.yourname.backtrack.module.impl.WTapModule;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
 import java.util.ArrayList;
@@ -23,6 +24,7 @@ public class ModuleManager {
         registerModule(new KeepSprintModule());
         registerModule(new ReachModule());
         registerModule(new VelocityModule());
+        registerModule(new WTapModule());
     }
 
     private void registerModule(Module module) {
