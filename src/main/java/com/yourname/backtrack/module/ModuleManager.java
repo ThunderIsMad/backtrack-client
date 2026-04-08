@@ -1,10 +1,11 @@
 package com.yourname.backtrack.module;
 
+import com.yourname.backtrack.module.impl.AutoClickerModule;
 import com.yourname.backtrack.module.impl.AutoRespawnModule;
 import com.yourname.backtrack.module.impl.AutoSprintModule;
 import com.yourname.backtrack.module.impl.FullBrightModule;
+import com.yourname.backtrack.module.impl.JumpResetModule;
 import com.yourname.backtrack.module.impl.KeepSprintModule;
-import com.yourname.backtrack.module.impl.ReachModule;
 import com.yourname.backtrack.module.impl.WTapModule;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
@@ -21,8 +22,9 @@ public class ModuleManager {
         registerModule(new FullBrightModule());
         registerModule(new AutoRespawnModule());
         registerModule(new KeepSprintModule());
-        registerModule(new ReachModule());
         registerModule(new WTapModule());
+        registerModule(new JumpResetModule());
+        registerModule(new AutoClickerModule());
     }
 
     private void registerModule(Module module) {
