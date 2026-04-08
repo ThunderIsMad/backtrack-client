@@ -13,7 +13,6 @@ public class WTapModule extends Module {
     private final NumberSetting ticks = new NumberSetting("Ticks", 1, 1, 3, 1);
     private final BooleanSetting onlyOnGround = new BooleanSetting("OnlyOnGround", false);
 
-    // last observed hurtTime — when it resets to max we know a hit just landed
     private int lastHurtTime = 0;
     private int cancelTicks  = 0;
 
@@ -23,6 +22,16 @@ public class WTapModule extends Module {
         addHudSettings();
     }
 
+    /** How many sprint-cancel ticks are still pending (0 = wtap finished). */
+    public int getCancelTicks() {
+        return cancelTicks;
+    }
+
+    /** How many ticks WTap is configured to cancel sprint for. */
+    public int getConfiguredTicks() {
+        return (int) ticks.getValue();
+    }
+
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.START) return;
@@ -30,10 +39,8 @@ public class WTapModule extends Module {
 
         int hurtTime = mc.player.hurtTime;
 
-        // hurtTime jumps to its max (hurtResistantTime, usually 10) when a hit lands
         if (hurtTime > lastHurtTime) {
             if (!onlyOnGround.getValue() || mc.player.onGround) {
-                // cancel sprint for the configured number of ticks
                 cancelTicks = (int) ticks.getValue();
             }
         }

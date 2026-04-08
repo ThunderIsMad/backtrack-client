@@ -1,5 +1,6 @@
 package com.yourname.backtrack.module.impl;
 
+import com.yourname.backtrack.SoloBacktrack;
 import com.yourname.backtrack.module.Category;
 import com.yourname.backtrack.module.Module;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -9,6 +10,8 @@ import org.lwjgl.input.Keyboard;
 public class JumpResetModule extends Module {
 
     private int jumpCooldown = 0;
+    // pending jump: wait this many ticks before applying motionY
+    private int jumpDelay    = 0;
 
     public JumpResetModule() {
         super("JumpReset", Category.COMBAT, Keyboard.KEY_NONE);
@@ -18,6 +21,7 @@ public class JumpResetModule extends Module {
     @Override
     public void onDisable() {
         jumpCooldown = 0;
+        jumpDelay    = 0;
     }
 
     @SubscribeEvent
@@ -27,14 +31,28 @@ public class JumpResetModule extends Module {
 
         if (jumpCooldown > 0) jumpCooldown--;
 
-        // Fire exactly when hurtTime is at its peak (fresh hit this tick)
-        // This matches the same tick the server begins simulating the jump arc
+        // Schedule a delayed jump when a hit lands, waiting for WTap sprint-cancel to finish
         if (mc.player.hurtTime == 10 && jumpCooldown == 0) {
-            if (mc.player.onGround) {
+            WTapModule wtap = getWTap();
+            // delay = wtap cancel ticks remaining + 1 so jump fires the tick after sprint is restored
+            int delay = (wtap != null && wtap.isEnabled()) ? wtap.getConfiguredTicks() + 1 : 0;
+            jumpDelay = delay;
+        }
+
+        if (jumpDelay > 0) {
+            jumpDelay--;
+            if (jumpDelay == 0 && mc.player.onGround) {
                 mc.player.motionY = 0.42;
                 mc.player.isAirBorne = true;
                 jumpCooldown = 12;
             }
         }
+    }
+
+    private WTapModule getWTap() {
+        for (Module m : SoloBacktrack.INSTANCE.getModuleManager().getModules()) {
+            if (m instanceof WTapModule) return (WTapModule) m;
+        }
+        return null;
     }
 }
