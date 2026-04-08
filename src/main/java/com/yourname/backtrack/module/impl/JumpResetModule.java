@@ -10,7 +10,6 @@ import org.lwjgl.input.Keyboard;
 public class JumpResetModule extends Module {
 
     private int jumpCooldown = 0;
-    // pending jump: wait this many ticks before applying motionY
     private int jumpDelay    = 0;
 
     public JumpResetModule() {
@@ -31,10 +30,8 @@ public class JumpResetModule extends Module {
 
         if (jumpCooldown > 0) jumpCooldown--;
 
-        // Schedule a delayed jump when a hit lands, waiting for WTap sprint-cancel to finish
         if (mc.player.hurtTime == 10 && jumpCooldown == 0) {
             WTapModule wtap = getWTap();
-            // delay = wtap cancel ticks remaining + 1 so jump fires the tick after sprint is restored
             int delay = (wtap != null && wtap.isEnabled()) ? wtap.getConfiguredTicks() + 1 : 0;
             jumpDelay = delay;
         }
@@ -50,7 +47,7 @@ public class JumpResetModule extends Module {
     }
 
     private WTapModule getWTap() {
-        for (Module m : SoloBacktrack.INSTANCE.getModuleManager().getModules()) {
+        for (Module m : SoloBacktrack.getInstance().getModuleManager().getModules()) {
             if (m instanceof WTapModule) return (WTapModule) m;
         }
         return null;
