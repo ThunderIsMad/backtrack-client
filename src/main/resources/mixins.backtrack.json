@@ -3,7 +3,5 @@
   "refmap": "mixins.backtrack.refmap.json",
   "minVersion": "0.7",
   "compatibilityLevel": "JAVA_8",
-  "client": [
-    "client.MixinGuiNewChat"
-  ]
+  "client": []
 }
