@@ -8,7 +8,6 @@ import org.lwjgl.input.Keyboard;
 
 public class JumpResetModule extends Module {
 
-    private int lastHurtTime = 0;
     private int jumpCooldown = 0;
 
     public JumpResetModule() {
@@ -18,7 +17,6 @@ public class JumpResetModule extends Module {
 
     @Override
     public void onDisable() {
-        lastHurtTime = 0;
         jumpCooldown = 0;
     }
 
@@ -29,19 +27,14 @@ public class JumpResetModule extends Module {
 
         if (jumpCooldown > 0) jumpCooldown--;
 
-        int hurtTime = mc.player.hurtTime;
-
-        // Detect incoming hit: hurtTime jumps back up to max on damage
-        if (hurtTime > lastHurtTime && jumpCooldown == 0) {
+        // Fire exactly when hurtTime is at its peak (fresh hit this tick)
+        // This matches the same tick the server begins simulating the jump arc
+        if (mc.player.hurtTime == 10 && jumpCooldown == 0) {
             if (mc.player.onGround) {
-                // Vanilla jump impulse — server simulation expects this as legal
                 mc.player.motionY = 0.42;
                 mc.player.isAirBorne = true;
-                // Full jump arc is ~12 ticks; cooldown prevents re-trigger during rapid hits
                 jumpCooldown = 12;
             }
         }
-
-        lastHurtTime = hurtTime;
     }
 }
