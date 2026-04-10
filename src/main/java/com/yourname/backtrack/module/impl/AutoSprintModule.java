@@ -13,12 +13,7 @@ public class AutoSprintModule extends Module {
 
     public AutoSprintModule() {
         super("AutoSprint", Category.MOVEMENT, Keyboard.KEY_G);
-
-        addSettings(
-                requireForward,
-                allowSneak
-        );
-
+        addSettings(requireForward, allowSneak);
         addHudSettings();
     }
 
@@ -26,6 +21,10 @@ public class AutoSprintModule extends Module {
     public void onInputUpdate(InputUpdateEvent event) {
         if (!isEnabled()) return;
         if (mc.player == null || mc.world == null) return;
+
+        // Suppress sprint during knockback arc so Intave's predicted XZ trajectory
+        // is not disrupted by early re-sprint. hurtTime > 0 means arc is active.
+        if (mc.player.hurtTime > 0) return;
 
         if (requireForward.getValue() && mc.player.moveForward <= 0) return;
         if (!allowSneak.getValue() && mc.player.isSneaking()) return;
@@ -35,4 +34,3 @@ public class AutoSprintModule extends Module {
         }
     }
 }
-

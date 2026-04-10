@@ -22,7 +22,7 @@ public class JumpResetModule extends Module {
     private final NumberSetting cooldownTicks = new NumberSetting("Cooldown", 14, 10, 20, 1);
     private final BooleanSetting debug = new BooleanSetting("Debug", false);
 
-    // State from the previous tick — required for justLanded and hurtTimeDecreased
+    // State from the previous tick
     private int     prevHurtTime  = 0;
     private double  prevMotionY   = 0.0;
     private boolean prevOnGround  = false;
@@ -54,7 +54,6 @@ public class JumpResetModule extends Module {
 
     @SubscribeEvent
     public void onPlayerTick(TickEvent.PlayerTickEvent event) {
-        // Read state after livingEntity.travel() has fully executed this tick
         if (event.phase != TickEvent.Phase.END) return;
         if (!isEnabled() || mc.player == null || mc.world == null) return;
 
@@ -65,30 +64,23 @@ public class JumpResetModule extends Module {
 
         if (jumpCooldown > 0) jumpCooldown--;
 
-        // GUARD 1: hurtTime is actively counting down (arc is live and progressing)
-        // Rejects frozen, re-applied, or jittered hurtTime values
+        // GUARD 1: hurtTime is actively counting down this tick
         boolean hurtTimeDecreased = prevHurtTime > 0
                 && curHurtTime == prevHurtTime - 1;
 
-        // GUARD 2: arc is nearly complete
-        // At hurtTime <= 2 the vertical KB arc has decayed to near-zero motionY
+        // GUARD 2: arc is nearly complete (hurtTime <= 2)
         boolean arcNearlyDone = curHurtTime > 0 && curHurtTime <= 2;
 
-        // GUARD 3: player just landed THIS exact tick
-        // prevMotionY < -0.01 confirms we were falling last tick
-        // curMotionY > -0.01 confirms ground collision zeroed the fall this tick
-        // This is the strongest onGround desync protection: both client and Intave's
-        // shadow entity resolve moveEntity() the same way on a real collision tick
+        // GUARD 3: player just landed THIS tick
+        // prevMotionY < -0.01 = was falling; curMotionY > -0.01 = collision zeroed it
         boolean justLanded = prevMotionY < -0.01
                 && curMotionY > -0.01
                 && (curOnGround || collidedV);
 
-        // GUARD 4: motionY was zeroed by the ground collision this tick
-        // Epsilon 0.005 tolerates float rounding without allowing mid-arc fire
+        // GUARD 4: motionY zeroed by ground collision this tick
         boolean motionYZero = Math.abs(curMotionY) < 0.005;
 
-        // GUARD 5: safe full-cube terrain below
-        // Stairs, slabs, fences, trapdoors cause isOnGround() desync — skip entirely
+        // GUARD 5: safe full-cube terrain (stairs/slabs/fences cause desync)
         boolean safeTerrain = isStandingOnSafeTerrain();
 
         boolean shouldJump = hurtTimeDecreased
@@ -99,8 +91,7 @@ public class JumpResetModule extends Module {
                 && jumpCooldown == 0;
 
         if (shouldJump) {
-            // 0.42 is the exact value of EntityPlayer.jump() — do not deviate
-            mc.player.motionY   = 0.42;
+            mc.player.motionY    = 0.42;
             mc.player.isAirBorne = true;
             jumpCooldown = (int) cooldownTicks.getValue();
 
@@ -113,7 +104,6 @@ public class JumpResetModule extends Module {
                         + " | cooldown=" + jumpCooldown);
             }
         } else if (debug.getValue() && curHurtTime > 0) {
-            // Log every arc tick to diagnose missed jumps
             System.out.println("[JumpReset] TICK"
                     + " | hurtTime=" + curHurtTime
                     + " | prevHurtTime=" + prevHurtTime
@@ -125,23 +115,21 @@ public class JumpResetModule extends Module {
                     + " | cooldown=" + jumpCooldown);
         }
 
-        // Update state for next tick
         prevHurtTime = curHurtTime;
         prevMotionY  = curMotionY;
         prevOnGround = curOnGround;
     }
 
     /**
-     * Returns true only when the block directly underfoot is a full cube.
-     * Non-full blocks cause isOnGround() desync between client and Intave's simulation.
-     * Uses -0.2001 Y offset to reliably sample past the feet boundary.
+     * Samples 0.01 below feet (not 0.2001 — that was sampling a block too low).
+     * Rejects non-full-cube blocks that cause isOnGround() desync with Intave.
      */
     private boolean isStandingOnSafeTerrain() {
         if (mc.world == null || mc.player == null) return false;
 
         BlockPos below = new BlockPos(
                 mc.player.posX,
-                mc.player.posY - 0.2001,
+                mc.player.posY - 0.01,
                 mc.player.posZ
         );
 
