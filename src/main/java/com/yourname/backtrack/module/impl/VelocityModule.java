@@ -9,19 +9,22 @@ import net.minecraft.network.play.server.SPacketEntityVelocity;
 import net.minecraft.network.play.server.SPacketConfirmTransaction;
 import net.minecraft.network.play.client.CPacketConfirmTransaction;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.network.FMLNetworkEvent;
-import net.minecraftforge.client.event.ClientChatReceivedEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
 
+import java.util.Arrays;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.Random;
 
 public class VelocityModule extends Module {
 
-    private final ModeSetting mode = new ModeSetting("Mode", "SmartDesync", "SmartDesync", "TransactionDelay", "Augustus3");
-    private final NumberSetting horizontal = new NumberSetting("Horizontal", 0.0, 1.0, 0.85, 0.01);
-    private final NumberSetting vertical   = new NumberSetting("Vertical",   0.0, 1.0, 1.0,  0.01);
+    private final ModeSetting mode = new ModeSetting(
+            "Mode",
+            Arrays.asList("SmartDesync", "TransactionDelay", "Augustus3"),
+            "SmartDesync"
+    );
+    private final NumberSetting  horizontal       = new NumberSetting("Horizontal", 0.0, 1.0, 0.85, 0.01);
+    private final NumberSetting  vertical         = new NumberSetting("Vertical",   0.0, 1.0, 1.0,  0.01);
     private final BooleanSetting onlyCombat       = new BooleanSetting("OnlyCombat",       true);
     private final BooleanSetting transactionSpoof = new BooleanSetting("TransactionSpoof", true);
 
@@ -36,8 +39,6 @@ public class VelocityModule extends Module {
         addSettings(mode, horizontal, vertical, onlyCombat, transactionSpoof);
         addHudSettings();
     }
-
-    // ─── Tick ─────────────────────────────────────────────────────────────────
 
     @SubscribeEvent
     public void onPlayerTick(TickEvent.PlayerTickEvent event) {
@@ -55,43 +56,31 @@ public class VelocityModule extends Module {
         processQueuedPackets();
     }
 
-    // ─── Packet handling (called from MixinNetHandlerPlayClient) ──────────────
-
-    /**
-     * Called by MixinNetHandlerPlayClient when a velocity packet arrives for
-     * this player. Returns true if the mixin should cancel the original packet.
-     */
     public boolean handleVelocityPacket(SPacketEntityVelocity packet) {
         if (!isEnabled() || mc.player == null) return false;
         if (!shouldReduceVelocity()) return false;
 
         queueModifiedVelocity(packet);
 
-        if (transactionSpoof.getValue() && mode.is("Augustus3")) {
+        if (transactionSpoof.getValue() && mode.getValue().equals("Augustus3")) {
             spoofTransactionPattern();
         }
 
-        return true; // tell mixin to cancel original
+        return true;
     }
 
-    /**
-     * Called by MixinNetHandlerPlayClient on SPacketConfirmTransaction.
-     * Returns true if the mixin should cancel the original packet.
-     */
     public boolean handleConfirmTransaction(SPacketConfirmTransaction packet) {
         if (!isEnabled()) return false;
 
         stats.recordIncoming(packet.getActionNumber(), packet.getWindowId());
 
-        if (mode.is("Augustus3") && transactionSpoof.getValue()
+        if (mode.getValue().equals("Augustus3") && transactionSpoof.getValue()
                 && shouldDelayTransaction()) {
             queueTransactionResponse(packet);
             return true;
         }
         return false;
     }
-
-    // ─── Private helpers ──────────────────────────────────────────────────────
 
     private boolean shouldReduceVelocity() {
         if (onlyCombat.getValue()) {
@@ -115,8 +104,6 @@ public class VelocityModule extends Module {
         final double finalY = (original.getMotionY() / 8000.0) * vReduction;
         final double finalZ = (original.getMotionZ() / 8000.0) * hReduction;
 
-        long delay = getOptimalDelay();
-
         transactionQueue.add(new TransactionEntry(
                 new Runnable() {
                     @Override
@@ -128,7 +115,7 @@ public class VelocityModule extends Module {
                         }
                     }
                 },
-                System.currentTimeMillis() + delay
+                System.currentTimeMillis() + getOptimalDelay()
         ));
     }
 
@@ -139,11 +126,11 @@ public class VelocityModule extends Module {
     }
 
     private void spoofTransactionPattern() {
-        // All work on main thread via tick queue — no raw threads
         int count = 1 + patternRandom.nextInt(3);
         for (int i = 0; i < count; i++) {
-            int windowId = patternRandom.nextBoolean() ? -1 : 0;
-            int actionId = stats.getNextPredictedAction();
+            final int windowId = patternRandom.nextBoolean() ? -1 : 0;
+            final int actionId = stats.getNextPredictedAction();
+            final long delay   = (long) (i * 2 + patternRandom.nextInt(3));
             transactionQueue.add(new TransactionEntry(
                     new Runnable() {
                         @Override
@@ -154,7 +141,7 @@ public class VelocityModule extends Module {
                             }
                         }
                     },
-                    System.currentTimeMillis() + (long) (i * 2 + patternRandom.nextInt(3))
+                    System.currentTimeMillis() + delay
             ));
         }
     }
@@ -194,12 +181,8 @@ public class VelocityModule extends Module {
         ));
     }
 
-    // ─── Accessors used by mixin ──────────────────────────────────────────────
-
     public double getHorizontal() { return horizontal.getValue(); }
     public double getVertical()   { return vertical.getValue();   }
-
-    // ─── Inner classes ────────────────────────────────────────────────────────
 
     private static class TransactionEntry {
         final Runnable task;
@@ -216,9 +199,7 @@ public class VelocityModule extends Module {
         private long   lastDelayTime       = 0;
         private int    transactionCount    = 0;
 
-        void update() {
-            averageLatency *= 0.99;
-        }
+        void update() { averageLatency *= 0.99; }
 
         void recordIncoming(int actionId, int windowId) {
             long now = System.currentTimeMillis();
@@ -230,9 +211,9 @@ public class VelocityModule extends Module {
             transactionCount++;
         }
 
-        double getAverageLatency()      { return averageLatency; }
-        long   getOptimalPacketSpacing(){ return (long)(averageLatency * 0.7) + 2; }
-        long   getTimeSinceLastDelay()  { return System.currentTimeMillis() - lastDelayTime; }
-        int    getNextPredictedAction() { return transactionCount + 1000; }
+        double getAverageLatency()       { return averageLatency; }
+        long   getOptimalPacketSpacing() { return (long)(averageLatency * 0.7) + 2; }
+        long   getTimeSinceLastDelay()   { return System.currentTimeMillis() - lastDelayTime; }
+        int    getNextPredictedAction()  { return transactionCount + 1000; }
     }
 }
