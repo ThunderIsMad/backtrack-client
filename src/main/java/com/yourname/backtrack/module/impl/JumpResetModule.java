@@ -17,17 +17,17 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
 
+import java.util.List;
+
 public class JumpResetModule extends Module {
 
     private final NumberSetting cooldownTicks = new NumberSetting("Cooldown", 14, 10, 20, 1);
     private final BooleanSetting debug = new BooleanSetting("Debug", false);
 
-    // State from the previous tick
-    private int     prevHurtTime  = 0;
-    private double  prevMotionY   = 0.0;
-    private boolean prevOnGround  = false;
-
-    private int jumpCooldown = 0;
+    private int     prevHurtTime = 0;
+    private double  prevMotionY  = 0.0;
+    private boolean prevOnGround = false;
+    private int     jumpCooldown = 0;
 
     public JumpResetModule() {
         super("JumpReset", Category.COMBAT, Keyboard.KEY_NONE);
@@ -36,20 +36,16 @@ public class JumpResetModule extends Module {
     }
 
     @Override
-    public void onEnable() {
-        resetState();
-    }
+    public void onEnable() { resetState(); }
 
     @Override
-    public void onDisable() {
-        resetState();
-    }
+    public void onDisable() { resetState(); }
 
     private void resetState() {
-        prevHurtTime  = 0;
-        prevMotionY   = 0.0;
-        prevOnGround  = false;
-        jumpCooldown  = 0;
+        prevHurtTime = 0;
+        prevMotionY  = 0.0;
+        prevOnGround = false;
+        jumpCooldown = 0;
     }
 
     @SubscribeEvent
@@ -64,23 +60,24 @@ public class JumpResetModule extends Module {
 
         if (jumpCooldown > 0) jumpCooldown--;
 
-        // GUARD 1: hurtTime is actively counting down this tick
+        // GUARD 1: hurtTime actively counting down (arc is live)
         boolean hurtTimeDecreased = prevHurtTime > 0
                 && curHurtTime == prevHurtTime - 1;
 
-        // GUARD 2: arc is nearly complete (hurtTime <= 2)
+        // GUARD 2: arc nearly complete
         boolean arcNearlyDone = curHurtTime > 0 && curHurtTime <= 2;
 
-        // GUARD 3: player just landed THIS tick
-        // prevMotionY < -0.01 = was falling; curMotionY > -0.01 = collision zeroed it
+        // GUARD 3: player just landed this exact tick
         boolean justLanded = prevMotionY < -0.01
                 && curMotionY > -0.01
                 && (curOnGround || collidedV);
 
-        // GUARD 4: motionY zeroed by ground collision this tick
+        // GUARD 4: motionY zeroed by ground collision
         boolean motionYZero = Math.abs(curMotionY) < 0.005;
 
-        // GUARD 5: safe full-cube terrain (stairs/slabs/fences cause desync)
+        // GUARD 5: safe terrain — uses actual block collision boxes under the
+        // player's AABB rather than a single-point Y sample, so it works
+        // regardless of posY floating-point position after landing
         boolean safeTerrain = isStandingOnSafeTerrain();
 
         boolean shouldJump = hurtTimeDecreased
@@ -100,8 +97,7 @@ public class JumpResetModule extends Module {
                         + " | hurtTime=" + curHurtTime
                         + " | prevHurtTime=" + prevHurtTime
                         + " | prevMotionY=" + String.format("%.4f", prevMotionY)
-                        + " | curMotionY=" + String.format("%.4f", curMotionY)
-                        + " | cooldown=" + jumpCooldown);
+                        + " | curMotionY=" + String.format("%.4f", curMotionY));
             }
         } else if (debug.getValue() && curHurtTime > 0) {
             System.out.println("[JumpReset] TICK"
@@ -121,32 +117,54 @@ public class JumpResetModule extends Module {
     }
 
     /**
-     * Samples 0.01 below feet (not 0.2001 — that was sampling a block too low).
-     * Rejects non-full-cube blocks that cause isOnGround() desync with Intave.
+     * Scans all block positions that overlap the player's foot-level AABB
+     * (a thin 0.1-block-tall slice at the player's feet). For each position,
+     * rejects known non-full-cube blocks and validates the bbox maxY.
+     * This approach is immune to posY floating-point sampling errors.
      */
     private boolean isStandingOnSafeTerrain() {
         if (mc.world == null || mc.player == null) return false;
 
-        BlockPos below = new BlockPos(
-                mc.player.posX,
-                mc.player.posY - 0.01,
-                mc.player.posZ
-        );
+        // Thin AABB slice at foot level: player base Y down to Y-0.1
+        AxisAlignedBB footBox = mc.player.getEntityBoundingBox().expand(0, 0, 0)
+                .offset(0, -0.1, 0)
+                .setMaxY(mc.player.getEntityBoundingBox().minY);
 
-        IBlockState state = mc.world.getBlockState(below);
-        Block block = state.getBlock();
+        // Collect all block positions overlapping the foot slice
+        List<AxisAlignedBB> blockBoxes = mc.world.getCollisionBoxes(mc.player, footBox);
 
-        if (block instanceof BlockStairs)    return false;
-        if (block instanceof BlockSlab)      return false;
-        if (block instanceof BlockFence)     return false;
-        if (block instanceof BlockFenceGate) return false;
-        if (block instanceof BlockTrapDoor)  return false;
+        if (blockBoxes.isEmpty()) return false;
 
-        try {
-            AxisAlignedBB box = state.getCollisionBoundingBox(mc.world, below);
-            return box != null && box.maxY >= 0.999;
-        } catch (Exception e) {
-            return false;
+        // Check each block position under the player
+        int minX = (int) Math.floor(footBox.minX);
+        int maxX = (int) Math.floor(footBox.maxX);
+        int minZ = (int) Math.floor(footBox.minZ);
+        int maxZ = (int) Math.floor(footBox.maxZ);
+        int y    = (int) Math.floor(mc.player.getEntityBoundingBox().minY - 0.1);
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                BlockPos pos = new BlockPos(x, y, z);
+                IBlockState state = mc.world.getBlockState(pos);
+                Block block = state.getBlock();
+
+                // Reject non-full-cube blocks explicitly
+                if (block instanceof BlockStairs)    return false;
+                if (block instanceof BlockSlab)      return false;
+                if (block instanceof BlockFence)     return false;
+                if (block instanceof BlockFenceGate) return false;
+                if (block instanceof BlockTrapDoor)  return false;
+
+                // Validate bounding box height
+                try {
+                    AxisAlignedBB box = state.getCollisionBoundingBox(mc.world, pos);
+                    if (box == null || box.maxY < 0.999) return false;
+                } catch (Exception e) {
+                    return false;
+                }
+            }
         }
+
+        return true;
     }
 }
