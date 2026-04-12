@@ -32,7 +32,6 @@ public class ClickGuiScreen extends GuiScreen {
     private final GuiTheme       guiTheme;
     private final long           openTime;
 
-    // Vape V4 Minimal Design Constants
     private static final int PANEL_W   = 150;
     private static final int PANEL_GAP = 8;
     private static final int HEADER_H  = 16;
@@ -40,8 +39,13 @@ public class ClickGuiScreen extends GuiScreen {
     private static final int SET_H     = 12;
     private static final int ROW_GAP   = 4;
     private static final int MAX_VIS_H = 240;
-    
-    // Color Palette - Vape V4 Minimal
+
+    // Fixed layout constants for slider — never shift regardless of value text width
+    private static final int SLIDER_W        = 50;
+    private static final int SLIDER_VAL_W    = 28; // reserved right-side width for value text
+    private static final int SLIDER_RIGHT_PAD = 4;
+    // sliderX = panelX + PANEL_W - SLIDER_VAL_W - SLIDER_RIGHT_PAD - SLIDER_W
+
     private static final int COLOR_BG        = 0xFF141414;
     private static final int COLOR_HOVER     = 0xFF1C1C1C;
     private static final int COLOR_OUTLINE   = 0xFF232323;
@@ -54,12 +58,12 @@ public class ClickGuiScreen extends GuiScreen {
 
     private final List<Panel> panels = new ArrayList<>();
 
-    private Module  expandedModule = null;
-    private boolean waitingForBind = false;
-    private boolean draggingSlider = false;
-    private NumberSetting draggedSlider = null;
-    private int draggedSliderX = 0;
-    private int draggedSliderW = 0;
+    private Module        expandedModule = null;
+    private boolean       waitingForBind = false;
+    private boolean       draggingSlider = false;
+    private NumberSetting draggedSlider  = null;
+    private int           draggedSliderX = 0;
+    private int           draggedSliderW = 0;
     private final Map<NumberSetting, Double> sliderAnimations = new HashMap<>();
 
     private static class Panel {
@@ -69,7 +73,6 @@ public class ClickGuiScreen extends GuiScreen {
         int     scrollOffset = 0;
         boolean dragging     = false;
         int     dragOffX, dragOffY;
-
         Panel(Category category, int x, int y) {
             this.category = category;
             this.x = x;
@@ -87,6 +90,11 @@ public class ClickGuiScreen extends GuiScreen {
     }
 
     public HudSettings getHudSettings() { return hudSettings; }
+
+    // Returns the fixed sliderX for a panel's x origin — stable regardless of current value.
+    private int sliderX(int panelX) {
+        return panelX + PANEL_W - SLIDER_VAL_W - SLIDER_RIGHT_PAD - SLIDER_W;
+    }
 
     @Override
     public void initGui() {
@@ -107,9 +115,7 @@ public class ClickGuiScreen extends GuiScreen {
 
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        for (Panel panel : panels) {
-            drawPanel(panel, mouseX, mouseY);
-        }
+        for (Panel panel : panels) drawPanel(panel, mouseX, mouseY);
         super.drawScreen(mouseX, mouseY, partialTicks);
     }
 
@@ -146,7 +152,6 @@ public class ClickGuiScreen extends GuiScreen {
             boolean inView = rowY + MOD_H >= y + HEADER_H && rowY < y + HEADER_H + contentH;
             if (inView) drawModuleRow(x, rowY, mod, mouseX, mouseY);
             rowY += MOD_H + ROW_GAP;
-
             if (mod == expandedModule) {
                 rowY = drawInlineSettings(x, rowY, mod, mouseX, mouseY,
                         y + HEADER_H, y + HEADER_H + contentH);
@@ -159,21 +164,15 @@ public class ClickGuiScreen extends GuiScreen {
     private void drawModuleRow(int x, int y, Module mod, int mouseX, int mouseY) {
         boolean hov      = isHov(x, y, PANEL_W, MOD_H, mouseX, mouseY);
         boolean expanded = mod == expandedModule;
-
-        int bg = expanded  ? withAlpha(COLOR_HOVER, 255)
-                : hov       ? withAlpha(COLOR_HOVER, 200)
-                  : withAlpha(COLOR_BG, 255);
+        int bg = expanded ? withAlpha(COLOR_HOVER, 255)
+                : hov     ? withAlpha(COLOR_HOVER, 200)
+                          : withAlpha(COLOR_BG, 255);
         Gui.drawRect(x, y, x + PANEL_W, y + MOD_H, animated(bg));
-
-        if (mod.isEnabled()) {
-            Gui.drawRect(x, y, x + 1, y + MOD_H, COLOR_ACCENT);
-        }
-
+        if (mod.isEnabled()) Gui.drawRect(x, y, x + 1, y + MOD_H, COLOR_ACCENT);
         int textColor = mod.isEnabled() ? COLOR_ACCENT
-                : expanded        ? COLOR_TEXT_MOD
-                  : withAlpha(COLOR_TEXT_MOD, 180);
+                : expanded              ? COLOR_TEXT_MOD
+                                        : withAlpha(COLOR_TEXT_MOD, 180);
         fontRenderer.drawStringWithShadow(mod.getName(), x + 6, y + 3, animated(textColor));
-
         if (!mod.getSettings().isEmpty()) {
             fontRenderer.drawStringWithShadow(expanded ? "\u2303" : "\u2304",
                     x + PANEL_W - 8, y + 3, withAlpha(COLOR_TEXT, 100));
@@ -184,10 +183,9 @@ public class ClickGuiScreen extends GuiScreen {
                                    int mouseX, int mouseY,
                                    int clipTop, int clipBot) {
         int y = startY;
-
         if (y + SET_H >= clipTop && y < clipBot) {
-            boolean hov    = isHov(x, y, PANEL_W, SET_H, mouseX, mouseY);
-            String  bindTx = waitingForBind ? "PRESS KEY..." : mod.getKeyName();
+            boolean hov   = isHov(x, y, PANEL_W, SET_H, mouseX, mouseY);
+            String bindTx = waitingForBind ? "PRESS KEY..." : mod.getKeyName();
             drawSettingRow(x, y, "Bind", bindTx, 0, hov, COLOR_ACCENT);
         }
         y += SET_H + ROW_GAP;
@@ -198,7 +196,7 @@ public class ClickGuiScreen extends GuiScreen {
             if (y + SET_H >= clipTop && y < clipBot) {
                 boolean hov = isHov(x, y, PANEL_W, SET_H, mouseX, mouseY);
                 if (s instanceof NumberSetting) {
-                    drawNumberSettingSlider(x, y, (NumberSetting) s, i + 1, hov, mouseX);
+                    drawNumberSettingSlider(x, y, (NumberSetting) s, hov);
                 } else {
                     drawSettingRow(x, y, s.getName(), getSettingValueText(s), i + 1, hov, COLOR_ACCENT);
                 }
@@ -213,71 +211,51 @@ public class ClickGuiScreen extends GuiScreen {
         int bg = hov ? withAlpha(COLOR_HOVER, 200) : withAlpha(COLOR_BG, 255);
         Gui.drawRect(x, y, x + PANEL_W, y + SET_H, animated(bg));
         Gui.drawRect(x, y, x + 2, y + SET_H, withAlpha(accent, hov ? 180 : 60));
-
         int maxLeftW = PANEL_W - (right != null ? fontRenderer.getStringWidth(right) + 10 : 0) - 8;
         String label = left;
-        while (label.length() > 1 && fontRenderer.getStringWidth(label) > maxLeftW) {
+        while (label.length() > 1 && fontRenderer.getStringWidth(label) > maxLeftW)
             label = label.substring(0, label.length() - 1);
-        }
         fontRenderer.drawStringWithShadow(label, x + 6, y + 2, COLOR_TEXT_SET);
-
         if (right != null && !right.isEmpty()) {
             int rw = fontRenderer.getStringWidth(right);
-            int rColor = "ON".equals(right)         ? COLOR_ACCENT
-                    : "OFF".equals(right)         ? withAlpha(COLOR_TEXT, 100)
+            int rColor = "ON".equals(right)           ? COLOR_ACCENT
+                    : "OFF".equals(right)          ? withAlpha(COLOR_TEXT, 100)
                       : "PRESS KEY...".equals(right) ? COLOR_ACCENT
-                        : withAlpha(COLOR_TEXT, 140);
+                                                     : withAlpha(COLOR_TEXT, 140);
             fontRenderer.drawStringWithShadow(right, x + PANEL_W - rw - 6, y + 2, rColor);
         }
     }
 
-    private void drawNumberSettingSlider(int x, int y, NumberSetting ns,
-                                         int rowIdx, boolean hov, int mouseX) {
+    private void drawNumberSettingSlider(int x, int y, NumberSetting ns, boolean hov) {
         int bg = hov ? withAlpha(COLOR_HOVER, 200) : withAlpha(COLOR_BG, 255);
         Gui.drawRect(x, y, x + PANEL_W, y + SET_H, animated(bg));
         Gui.drawRect(x, y, x + 2, y + SET_H, withAlpha(COLOR_ACCENT, hov ? 180 : 60));
 
-        String valStr  = String.format(Locale.US, "%.1f", ns.getValue());
-        int    valWidth  = fontRenderer.getStringWidth(valStr);
-        int    sliderW   = 50;
-        int    sliderGap = 4;
+        // Fixed-position slider — sliderX never depends on current value
+        int sx = sliderX(x);
+        int valAreaX = sx + SLIDER_W + SLIDER_RIGHT_PAD;
 
-        int maxLeftW = PANEL_W - sliderW - sliderGap - valWidth - 8;
+        int maxLeftW = sx - x - 8;
         String label = ns.getName();
-        while (label.length() > 1 && fontRenderer.getStringWidth(label) > maxLeftW) {
+        while (label.length() > 1 && fontRenderer.getStringWidth(label) > maxLeftW)
             label = label.substring(0, label.length() - 1);
-        }
         fontRenderer.drawStringWithShadow(label, x + 6, y + 2, COLOR_TEXT_SET);
 
-        // sliderX / sliderY must match the hit-test in handlePanelClick exactly
-        int sliderX = x + PANEL_W - sliderW - valWidth - sliderGap;
+        // Slider bar
         int sliderY = y + SET_H / 2 - 2;
-        int sliderH = 4;
-
         double realPct = (ns.getValue() - ns.getMin()) / (ns.getMax() - ns.getMin());
         Double animVal = sliderAnimations.get(ns);
-        if (animVal == null) { animVal = realPct; sliderAnimations.put(ns, animVal); }
-        double animatedPct = animVal + (realPct - animVal) * 0.2;
-        sliderAnimations.put(ns, animatedPct);
+        if (animVal == null) { animVal = realPct; }
+        animVal = animVal + (realPct - animVal) * 0.2;
+        sliderAnimations.put(ns, animVal);
+        int fillW = (int)(SLIDER_W * animVal);
+        Gui.drawRect(sx, sliderY, sx + SLIDER_W, sliderY + 4, withAlpha(COLOR_SLIDER_BG, 255));
+        Gui.drawRect(sx, sliderY, sx + fillW,     sliderY + 4, COLOR_ACCENT);
 
-        int fillW = (int)(sliderW * animatedPct);
-        Gui.drawRect(sliderX, sliderY, sliderX + sliderW, sliderY + sliderH, withAlpha(COLOR_SLIDER_BG, 255));
-        Gui.drawRect(sliderX, sliderY, sliderX + fillW,   sliderY + sliderH, COLOR_ACCENT);
-
-        fontRenderer.drawStringWithShadow(valStr, sliderX + sliderW + sliderGap, y + 2, COLOR_TEXT);
-    }
-
-    // Shared helper: compute slider geometry for a given rowY — used by both draw and hit-test.
-    private int[] getSliderGeometry(int x, int rowY, NumberSetting ns) {
-        String valStr  = String.format(Locale.US, "%.1f", ns.getValue());
-        int    valWidth  = fontRenderer.getStringWidth(valStr);
-        int    sliderW   = 50;
-        int    sliderGap = 4;
-        int    sliderX   = x + PANEL_W - sliderW - valWidth - sliderGap;
-        int    sliderY   = rowY + SET_H / 2 - 2;
-        int    sliderH   = 4;
-        // Expand hit area vertically to full row height for easier clicking
-        return new int[]{ sliderX, rowY, sliderW, SET_H };
+        // Value text right-aligned in the reserved area
+        String valStr = String.format(Locale.US, "%.1f", ns.getValue());
+        int rw = fontRenderer.getStringWidth(valStr);
+        fontRenderer.drawStringWithShadow(valStr, x + PANEL_W - SLIDER_RIGHT_PAD - rw, y + 2, COLOR_TEXT);
     }
 
     @Override
@@ -305,10 +283,9 @@ public class ClickGuiScreen extends GuiScreen {
     }
 
     private void updateSliderFromMouse(NumberSetting ns, int mouseX, int sliderX, int sliderW) {
-        double range = ns.getMax() - ns.getMin();
-        double pct   = (double)(mouseX - sliderX) / sliderW;
+        double pct = (double)(mouseX - sliderX) / sliderW;
         pct = Math.max(0, Math.min(1, pct));
-        double newValue = ns.getMin() + pct * range;
+        double newValue = ns.getMin() + pct * (ns.getMax() - ns.getMin());
         double step = ns.getIncrement();
         if (step > 0) newValue = Math.round(newValue / step) * step;
         ns.setValue(newValue);
@@ -318,6 +295,7 @@ public class ClickGuiScreen extends GuiScreen {
         int x = panel.x;
         int y = panel.y;
 
+        // Header
         if (isHov(x, y, PANEL_W, HEADER_H, mouseX, mouseY)) {
             if (btn == 0) {
                 panel.dragging = true;
@@ -341,10 +319,11 @@ public class ClickGuiScreen extends GuiScreen {
 
         int rowY = y + HEADER_H - panel.scrollOffset;
         for (Module mod : getModulesForCategory(panel.category)) {
+
+            // Module row
             if (isHov(x, rowY, PANEL_W, MOD_H, mouseX, mouseY)) {
-                if (btn == 0) {
-                    mod.toggle();
-                } else if (btn == 1) {
+                if (btn == 0) mod.toggle();
+                else if (btn == 1) {
                     expandedModule = (expandedModule == mod) ? null : mod;
                     waitingForBind = false;
                 }
@@ -361,31 +340,23 @@ public class ClickGuiScreen extends GuiScreen {
             }
             rowY += SET_H + ROW_GAP;
 
+            // Settings rows
             for (Setting s : getMainSettings(mod)) {
-                if (s instanceof NumberSetting) {
-                    NumberSetting ns = (NumberSetting) s;
-                    // Use full row as hit area — same geometry as draw
-                    String valStr  = String.format(Locale.US, "%.1f", ns.getValue());
-                    int    valWidth  = fontRenderer.getStringWidth(valStr);
-                    int    sliderW   = 50;
-                    int    sliderGap = 4;
-                    int    sliderX   = x + PANEL_W - sliderW - valWidth - sliderGap;
-                    if (isHov(sliderX, rowY, sliderW, SET_H, mouseX, mouseY)) {
-                        if (btn == 0) {
-                            draggingSlider = true;
-                            draggedSlider  = ns;
-                            draggedSliderX = sliderX;
-                            draggedSliderW = sliderW;
-                            updateSliderFromMouse(ns, mouseX, sliderX, sliderW);
-                            return true;
-                        } else {
-                            handleSettingClick(mod, s, btn);
-                            return true;
-                        }
-                    }
-                }
                 if (isHov(x, rowY, PANEL_W, SET_H, mouseX, mouseY)) {
-                    handleSettingClick(mod, s, btn);
+                    if (s instanceof NumberSetting) {
+                        // Only start drag if clicking within the slider bar area
+                        int sx = sliderX(x);
+                        if (btn == 0 && mouseX >= sx && mouseX < sx + SLIDER_W) {
+                            draggingSlider = true;
+                            draggedSlider  = (NumberSetting) s;
+                            draggedSliderX = sx;
+                            draggedSliderW = SLIDER_W;
+                            updateSliderFromMouse((NumberSetting) s, mouseX, sx, SLIDER_W);
+                        }
+                        // Clicking label side of a NumberSetting row does nothing
+                    } else {
+                        handleSettingClick(mod, s, btn);
+                    }
                     return true;
                 }
                 rowY += SET_H + ROW_GAP;
@@ -399,10 +370,8 @@ public class ClickGuiScreen extends GuiScreen {
         super.handleMouseInput();
         int wheel = Mouse.getEventDWheel();
         if (wheel == 0) return;
-
         int mx = Mouse.getEventX()  * width  / mc.displayWidth;
         int my = height - Mouse.getEventY() * height / mc.displayHeight - 1;
-
         for (Panel panel : panels) {
             int contentH = getPanelContentHeight(panel);
             if (isHov(panel.x, panel.y + HEADER_H, PANEL_W, contentH, mx, my)) {
@@ -443,9 +412,7 @@ public class ClickGuiScreen extends GuiScreen {
     }
 
     private void saveAndClose() {
-        if (!panels.isEmpty()) {
-            configManager.saveGuiPosition(panels.get(0).x, panels.get(0).y);
-        }
+        if (!panels.isEmpty()) configManager.saveGuiPosition(panels.get(0).x, panels.get(0).y);
         mc.displayGuiScreen(null);
     }
 
@@ -454,8 +421,7 @@ public class ClickGuiScreen extends GuiScreen {
         for (Module mod : getModulesForCategory(panel.category)) {
             h += MOD_H + ROW_GAP;
             if (mod == expandedModule) {
-                int rows = 1 + getMainSettings(mod).size();
-                h += rows * (SET_H + ROW_GAP);
+                h += (1 + getMainSettings(mod).size()) * (SET_H + ROW_GAP);
             }
         }
         return h;
@@ -467,9 +433,8 @@ public class ClickGuiScreen extends GuiScreen {
 
     private List<Module> getModulesForCategory(Category cat) {
         List<Module> result = new ArrayList<>();
-        for (Module m : moduleManager.getModules()) {
+        for (Module m : moduleManager.getModules())
             if (m.getCategory() == cat) result.add(m);
-        }
         return result;
     }
 
@@ -477,25 +442,21 @@ public class ClickGuiScreen extends GuiScreen {
         List<Setting> result = new ArrayList<>();
         for (Setting s : mod.getSettings()) {
             if (s.getGroup() != SettingGroup.HUDTEXT
-                    && s.getGroup() != SettingGroup.DEBUG_WINDOW) {
+                    && s.getGroup() != SettingGroup.DEBUG_WINDOW)
                 result.add(s);
-            }
         }
         return result;
     }
 
     private void handleSettingClick(Module mod, Setting s, int btn) {
-        if (s instanceof BooleanSetting) {
-            ((BooleanSetting) s).toggle();
-        } else if (s instanceof ModeSetting) {
-            ((ModeSetting) s).cycle();
-        } else if (s instanceof NumberSetting) {
-            NumberSetting ns = (NumberSetting) s;
-            if (btn == 0) ns.increase(); else ns.decrease();
+        if (s instanceof BooleanSetting)     ((BooleanSetting) s).toggle();
+        else if (s instanceof ModeSetting)   ((ModeSetting) s).cycle();
+        else if (s instanceof NumberSetting) {
+            if (btn == 0) ((NumberSetting) s).increase();
+            else          ((NumberSetting) s).decrease();
         } else if (s instanceof ActionSetting) {
             ((ActionSetting) s).trigger(
-                    new ActionSetting.ActionContext(
-                            this, moduleManager, configManager, guiTheme));
+                    new ActionSetting.ActionContext(this, moduleManager, configManager, guiTheme));
         }
         configManager.saveModuleSettings(moduleManager);
         configManager.saveModuleHudSettings(moduleManager);
@@ -515,30 +476,25 @@ public class ClickGuiScreen extends GuiScreen {
     private void enableScissor(int x, int y, int w, int h) {
         double scaleX = (double) mc.displayWidth  / width;
         double scaleY = (double) mc.displayHeight / height;
-        int sx = (int)(x       * scaleX);
-        int sy = (int)(mc.displayHeight - (y + h) * scaleY);
-        int sw = (int)(w * scaleX);
-        int sh = (int)(h * scaleY);
         GL11.glEnable(GL11.GL_SCISSOR_TEST);
-        GL11.glScissor(sx, sy, sw, sh);
+        GL11.glScissor(
+                (int)(x * scaleX),
+                (int)(mc.displayHeight - (y + h) * scaleY),
+                (int)(w * scaleX),
+                (int)(h * scaleY));
     }
 
     private int animated(int color) {
-        float progress = Math.min(1.0f,
-                (System.currentTimeMillis() - openTime) / 220.0f);
+        float p = Math.min(1.0f, (System.currentTimeMillis() - openTime) / 220.0f);
         int alpha = (color >> 24) & 0xFF;
-        return ((int)(alpha * progress) << 24) | (color & 0x00FFFFFF);
+        return ((int)(alpha * p) << 24) | (color & 0x00FFFFFF);
     }
 
     private String getSettingValueText(Setting s) {
-        if (s instanceof BooleanSetting)
-            return ((BooleanSetting) s).getValue() ? "ON" : "OFF";
-        if (s instanceof NumberSetting)
-            return String.format(Locale.US, "%.1f", ((NumberSetting) s).getValue());
-        if (s instanceof ModeSetting)
-            return ((ModeSetting) s).getValue();
-        if (s instanceof ActionSetting)
-            return ">";
+        if (s instanceof BooleanSetting) return ((BooleanSetting) s).getValue() ? "ON" : "OFF";
+        if (s instanceof NumberSetting)  return String.format(Locale.US, "%.1f", ((NumberSetting) s).getValue());
+        if (s instanceof ModeSetting)    return ((ModeSetting) s).getValue();
+        if (s instanceof ActionSetting)  return ">";
         return "";
     }
 
