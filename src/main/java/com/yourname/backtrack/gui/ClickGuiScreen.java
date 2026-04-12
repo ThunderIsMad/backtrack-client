@@ -42,15 +42,15 @@ public class ClickGuiScreen extends GuiScreen {
     private static final int MAX_VIS_H = 240;
     
     // Color Palette - Vape V4 Minimal
-    private static final int COLOR_BG        = 0xFF141414;  // rgb(20, 20, 20)
-    private static final int COLOR_HOVER     = 0xFF1C1C1C;  // rgb(28, 28, 28)
-    private static final int COLOR_OUTLINE   = 0xFF232323;  // rgb(35, 35, 35)
-    private static final int COLOR_ACCENT    = 0xFF4DA3FF;  // rgb(77, 163, 255)
-    private static final int COLOR_SLIDER_BG = 0xFF282828;  // rgb(40, 40, 40)
-    private static final int COLOR_TEXT      = 0xFFD2D2D2;  // rgb(210, 210, 210)
-    private static final int COLOR_TEXT_MOD  = 0xFFE1E1E1;  // rgb(225, 225, 225)
-    private static final int COLOR_TEXT_SET  = 0xFFBEBEBE;  // rgb(190, 190, 190)
-    private static final int COLOR_HEADER    = 0xFF181818;  // rgb(24, 24, 24)
+    private static final int COLOR_BG        = 0xFF141414;
+    private static final int COLOR_HOVER     = 0xFF1C1C1C;
+    private static final int COLOR_OUTLINE   = 0xFF232323;
+    private static final int COLOR_ACCENT    = 0xFF4DA3FF;
+    private static final int COLOR_SLIDER_BG = 0xFF282828;
+    private static final int COLOR_TEXT      = 0xFFD2D2D2;
+    private static final int COLOR_TEXT_MOD  = 0xFFE1E1E1;
+    private static final int COLOR_TEXT_SET  = 0xFFBEBEBE;
+    private static final int COLOR_HEADER    = 0xFF181818;
 
     private final List<Panel> panels = new ArrayList<>();
 
@@ -119,49 +119,31 @@ public class ClickGuiScreen extends GuiScreen {
         int contentH = panel.collapsed ? 0 : getPanelContentHeight(panel);
         int panelH   = HEADER_H + contentH;
 
-        // Draw flat panel background
         Gui.drawRect(x, y, x + PANEL_W, y + panelH, withAlpha(COLOR_BG, 245));
-
-        // Draw subtle 1px outline
         drawOutline(x, y, PANEL_W, panelH, COLOR_OUTLINE);
-
-        // Draw header (slightly darker)
         Gui.drawRect(x, y, x + PANEL_W, y + HEADER_H, withAlpha(COLOR_HEADER, 250));
 
         String catName = panel.category.name().charAt(0)
                 + panel.category.name().substring(1).toLowerCase(Locale.ROOT);
-        
-        // Centered category text
         fontRenderer.drawStringWithShadow(catName,
                 x + PANEL_W / 2 - fontRenderer.getStringWidth(catName) / 2,
-                y + 4,
-                COLOR_TEXT);
-
-        // Collapse indicator
+                y + 4, COLOR_TEXT);
         fontRenderer.drawStringWithShadow(panel.collapsed ? "+" : "-",
-                x + PANEL_W - 8, y + 4,
-                withAlpha(COLOR_TEXT, 120));
+                x + PANEL_W - 8, y + 4, withAlpha(COLOR_TEXT, 120));
 
-        // Thin 2px accent underline below header text (60% width, centered)
-        int textWidth = fontRenderer.getStringWidth(catName);
         int underlineWidth = (int)(PANEL_W * 0.6);
         int underlineX = x + PANEL_W / 2 - underlineWidth / 2;
         Gui.drawRect(underlineX, y + HEADER_H - 2, underlineX + underlineWidth, y + HEADER_H,
                 panel.collapsed ? COLOR_OUTLINE : COLOR_ACCENT);
 
-        if (panel.collapsed) {
-            return;
-        }
+        if (panel.collapsed) return;
 
-        // Content area background
         Gui.drawRect(x, y + HEADER_H, x + PANEL_W, y + HEADER_H + contentH, withAlpha(COLOR_BG, 250));
-
         enableScissor(x, y + HEADER_H, PANEL_W, contentH);
 
         int rowY = y + HEADER_H - panel.scrollOffset;
         for (Module mod : getModulesForCategory(panel.category)) {
-            boolean inView = rowY + MOD_H >= y + HEADER_H
-                    && rowY       <  y + HEADER_H + contentH;
+            boolean inView = rowY + MOD_H >= y + HEADER_H && rowY < y + HEADER_H + contentH;
             if (inView) drawModuleRow(x, rowY, mod, mouseX, mouseY);
             rowY += MOD_H + ROW_GAP;
 
@@ -178,30 +160,23 @@ public class ClickGuiScreen extends GuiScreen {
         boolean hov      = isHov(x, y, PANEL_W, MOD_H, mouseX, mouseY);
         boolean expanded = mod == expandedModule;
 
-        // Flat background with subtle hover effect
         int bg = expanded  ? withAlpha(COLOR_HOVER, 255)
                 : hov       ? withAlpha(COLOR_HOVER, 200)
                   : withAlpha(COLOR_BG, 255);
         Gui.drawRect(x, y, x + PANEL_W, y + MOD_H, animated(bg));
 
-        // Subtle left accent indicator (1px) for enabled modules
         if (mod.isEnabled()) {
             Gui.drawRect(x, y, x + 1, y + MOD_H, COLOR_ACCENT);
         }
 
-        // Enabled indicator - subtle accent text, no blue bar
         int textColor = mod.isEnabled() ? COLOR_ACCENT
                 : expanded        ? COLOR_TEXT_MOD
                   : withAlpha(COLOR_TEXT_MOD, 180);
-        
-        // 6px left padding for clean alignment
         fontRenderer.drawStringWithShadow(mod.getName(), x + 6, y + 3, animated(textColor));
 
-        // Expand indicator
         if (!mod.getSettings().isEmpty()) {
-            fontRenderer.drawStringWithShadow(expanded ? "⌃" : "⌄",
-                    x + PANEL_W - 8, y + 3,
-                    withAlpha(COLOR_TEXT, 100));
+            fontRenderer.drawStringWithShadow(expanded ? "\u2303" : "\u2304",
+                    x + PANEL_W - 8, y + 3, withAlpha(COLOR_TEXT, 100));
         }
     }
 
@@ -225,8 +200,7 @@ public class ClickGuiScreen extends GuiScreen {
                 if (s instanceof NumberSetting) {
                     drawNumberSettingSlider(x, y, (NumberSetting) s, i + 1, hov, mouseX);
                 } else {
-                    drawSettingRow(x, y, s.getName(), getSettingValueText(s),
-                            i + 1, hov, COLOR_ACCENT);
+                    drawSettingRow(x, y, s.getName(), getSettingValueText(s), i + 1, hov, COLOR_ACCENT);
                 }
             }
             y += SET_H + ROW_GAP;
@@ -236,20 +210,15 @@ public class ClickGuiScreen extends GuiScreen {
 
     private void drawSettingRow(int x, int y, String left, String right,
                                 int rowIdx, boolean hov, int accent) {
-        // Flat background with subtle hover
         int bg = hov ? withAlpha(COLOR_HOVER, 200) : withAlpha(COLOR_BG, 255);
         Gui.drawRect(x, y, x + PANEL_W, y + SET_H, animated(bg));
-
-        // Subtle left accent line
-        Gui.drawRect(x, y, x + 2, y + SET_H,
-                withAlpha(accent, hov ? 180 : 60));
+        Gui.drawRect(x, y, x + 2, y + SET_H, withAlpha(accent, hov ? 180 : 60));
 
         int maxLeftW = PANEL_W - (right != null ? fontRenderer.getStringWidth(right) + 10 : 0) - 8;
         String label = left;
         while (label.length() > 1 && fontRenderer.getStringWidth(label) > maxLeftW) {
             label = label.substring(0, label.length() - 1);
         }
-        // 6px left padding
         fontRenderer.drawStringWithShadow(label, x + 6, y + 2, COLOR_TEXT_SET);
 
         if (right != null && !right.isEmpty()) {
@@ -264,53 +233,51 @@ public class ClickGuiScreen extends GuiScreen {
 
     private void drawNumberSettingSlider(int x, int y, NumberSetting ns,
                                          int rowIdx, boolean hov, int mouseX) {
-        // Flat background with subtle hover
         int bg = hov ? withAlpha(COLOR_HOVER, 200) : withAlpha(COLOR_BG, 255);
         Gui.drawRect(x, y, x + PANEL_W, y + SET_H, animated(bg));
-        
-        // Subtle left accent line
-        Gui.drawRect(x, y, x + 2, y + SET_H,
-                withAlpha(COLOR_ACCENT, hov ? 180 : 60));
+        Gui.drawRect(x, y, x + 2, y + SET_H, withAlpha(COLOR_ACCENT, hov ? 180 : 60));
 
-        String valStr = String.format(Locale.US, "%.1f", ns.getValue());
-        int valWidth = fontRenderer.getStringWidth(valStr);
-        int sliderW = 50;
-        int sliderGap = 4;
-        int rightSectionW = sliderW + sliderGap + valWidth;
-        
-        int maxLeftW = PANEL_W - rightSectionW - 8;
+        String valStr  = String.format(Locale.US, "%.1f", ns.getValue());
+        int    valWidth  = fontRenderer.getStringWidth(valStr);
+        int    sliderW   = 50;
+        int    sliderGap = 4;
+
+        int maxLeftW = PANEL_W - sliderW - sliderGap - valWidth - 8;
         String label = ns.getName();
         while (label.length() > 1 && fontRenderer.getStringWidth(label) > maxLeftW) {
             label = label.substring(0, label.length() - 1);
         }
-        // 6px left padding
         fontRenderer.drawStringWithShadow(label, x + 6, y + 2, COLOR_TEXT_SET);
 
+        // sliderX / sliderY must match the hit-test in handlePanelClick exactly
         int sliderX = x + PANEL_W - sliderW - valWidth - sliderGap;
-        int sliderY = y + SET_H / 2 - 2;  // Center the 4px slider vertically
-        int sliderH = 4;  // Height: 4px as per spec
+        int sliderY = y + SET_H / 2 - 2;
+        int sliderH = 4;
 
         double realPct = (ns.getValue() - ns.getMin()) / (ns.getMax() - ns.getMin());
         Double animVal = sliderAnimations.get(ns);
-        if (animVal == null) {
-            animVal = realPct;
-            sliderAnimations.put(ns, animVal);
-        }
+        if (animVal == null) { animVal = realPct; sliderAnimations.put(ns, animVal); }
         double animatedPct = animVal + (realPct - animVal) * 0.2;
         sliderAnimations.put(ns, animatedPct);
 
         int fillW = (int)(sliderW * animatedPct);
+        Gui.drawRect(sliderX, sliderY, sliderX + sliderW, sliderY + sliderH, withAlpha(COLOR_SLIDER_BG, 255));
+        Gui.drawRect(sliderX, sliderY, sliderX + fillW,   sliderY + sliderH, COLOR_ACCENT);
 
-        // Thin slider background
-        Gui.drawRect(sliderX, sliderY, sliderX + sliderW, sliderY + sliderH,
-                withAlpha(COLOR_SLIDER_BG, 255));
-        // Thin fill using accent color
-        Gui.drawRect(sliderX, sliderY, sliderX + fillW, sliderY + sliderH,
-                COLOR_ACCENT);
+        fontRenderer.drawStringWithShadow(valStr, sliderX + sliderW + sliderGap, y + 2, COLOR_TEXT);
+    }
 
-        // Right-aligned value text
-        fontRenderer.drawStringWithShadow(valStr, sliderX + sliderW + sliderGap,
-                y + 2, COLOR_TEXT);
+    // Shared helper: compute slider geometry for a given rowY — used by both draw and hit-test.
+    private int[] getSliderGeometry(int x, int rowY, NumberSetting ns) {
+        String valStr  = String.format(Locale.US, "%.1f", ns.getValue());
+        int    valWidth  = fontRenderer.getStringWidth(valStr);
+        int    sliderW   = 50;
+        int    sliderGap = 4;
+        int    sliderX   = x + PANEL_W - sliderW - valWidth - sliderGap;
+        int    sliderY   = rowY + SET_H / 2 - 2;
+        int    sliderH   = 4;
+        // Expand hit area vertically to full row height for easier clicking
+        return new int[]{ sliderX, rowY, sliderW, SET_H };
     }
 
     @Override
@@ -339,13 +306,11 @@ public class ClickGuiScreen extends GuiScreen {
 
     private void updateSliderFromMouse(NumberSetting ns, int mouseX, int sliderX, int sliderW) {
         double range = ns.getMax() - ns.getMin();
-        double pct = (double)(mouseX - sliderX) / sliderW;
+        double pct   = (double)(mouseX - sliderX) / sliderW;
         pct = Math.max(0, Math.min(1, pct));
         double newValue = ns.getMin() + pct * range;
         double step = ns.getIncrement();
-        if (step > 0) {
-            newValue = Math.round(newValue / step) * step;
-        }
+        if (step > 0) newValue = Math.round(newValue / step) * step;
         ns.setValue(newValue);
     }
 
@@ -380,13 +345,8 @@ public class ClickGuiScreen extends GuiScreen {
                 if (btn == 0) {
                     mod.toggle();
                 } else if (btn == 1) {
-                    if (expandedModule == mod) {
-                        expandedModule = null;
-                        waitingForBind = false;
-                    } else {
-                        expandedModule = mod;
-                        waitingForBind = false;
-                    }
+                    expandedModule = (expandedModule == mod) ? null : mod;
+                    waitingForBind = false;
                 }
                 return true;
             }
@@ -394,6 +354,7 @@ public class ClickGuiScreen extends GuiScreen {
 
             if (mod != expandedModule) continue;
 
+            // Bind row
             if (isHov(x, rowY, PANEL_W, SET_H, mouseX, mouseY)) {
                 if (btn == 0) waitingForBind = !waitingForBind;
                 return true;
@@ -402,20 +363,20 @@ public class ClickGuiScreen extends GuiScreen {
 
             for (Setting s : getMainSettings(mod)) {
                 if (s instanceof NumberSetting) {
-                    String valStr = String.format(Locale.US, "%.1f", ((NumberSetting) s).getValue());
-                    int valWidth = fontRenderer.getStringWidth(valStr);
-                    int sliderW = 50;
-                    int sliderGap = 4;
-                    int sliderX = x + PANEL_W - sliderW - valWidth - sliderGap;
-                    int sliderY = rowY + 3;
-                    int sliderH = SET_H - 6;
-                    if (isHov(sliderX, sliderY, sliderW, sliderH, mouseX, mouseY)) {
+                    NumberSetting ns = (NumberSetting) s;
+                    // Use full row as hit area — same geometry as draw
+                    String valStr  = String.format(Locale.US, "%.1f", ns.getValue());
+                    int    valWidth  = fontRenderer.getStringWidth(valStr);
+                    int    sliderW   = 50;
+                    int    sliderGap = 4;
+                    int    sliderX   = x + PANEL_W - sliderW - valWidth - sliderGap;
+                    if (isHov(sliderX, rowY, sliderW, SET_H, mouseX, mouseY)) {
                         if (btn == 0) {
                             draggingSlider = true;
-                            draggedSlider = (NumberSetting) s;
+                            draggedSlider  = ns;
                             draggedSliderX = sliderX;
                             draggedSliderW = sliderW;
-                            updateSliderFromMouse(draggedSlider, mouseX, sliderX, sliderW);
+                            updateSliderFromMouse(ns, mouseX, sliderX, sliderW);
                             return true;
                         } else {
                             handleSettingClick(mod, s, btn);
@@ -459,7 +420,7 @@ public class ClickGuiScreen extends GuiScreen {
         if (btn == 0) {
             for (Panel panel : panels) panel.dragging = false;
             draggingSlider = false;
-            draggedSlider = null;
+            draggedSlider  = null;
             draggedSliderX = 0;
             draggedSliderW = 0;
         }
@@ -581,11 +542,6 @@ public class ClickGuiScreen extends GuiScreen {
         return "";
     }
 
-    private int getSettingAccentColor(Setting s) {
-        return COLOR_ACCENT;
-    }
-
-    // Helper method to create color with alpha
     private int withAlpha(int color, int alpha) {
         return (alpha << 24) | (color & 0x00FFFFFF);
     }
