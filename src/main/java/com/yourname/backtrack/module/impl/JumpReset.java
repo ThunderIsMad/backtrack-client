@@ -2,11 +2,11 @@ package com.yourname.backtrack.module.impl;
 
 import com.yourname.backtrack.module.Category;
 import com.yourname.backtrack.module.Module;
+import com.yourname.backtrack.setting.BooleanSetting;
+import com.yourname.backtrack.setting.ModeSetting;
+import com.yourname.backtrack.setting.NumberSetting;
 import net.minecraftforge.client.event.InputUpdateEvent;
 import org.lwjgl.input.Keyboard;
-import setting.BooleanSetting;
-import setting.ModeSetting;
-import setting.NumberSetting;
 
 import java.util.Arrays;
 
