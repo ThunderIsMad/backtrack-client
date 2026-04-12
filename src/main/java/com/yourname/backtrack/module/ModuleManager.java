@@ -4,7 +4,7 @@ import com.yourname.backtrack.module.impl.AutoClickerModule;
 import com.yourname.backtrack.module.impl.AutoRespawnModule;
 import com.yourname.backtrack.module.impl.AutoSprintModule;
 import com.yourname.backtrack.module.impl.FullBrightModule;
-import com.yourname.backtrack.module.impl.JumpResetModule;
+import com.yourname.backtrack.module.impl.JumpReset;
 import com.yourname.backtrack.module.impl.KeepSprintModule;
 import com.yourname.backtrack.module.impl.VelocityModule;
 import com.yourname.backtrack.module.impl.WTapModule;
@@ -24,7 +24,7 @@ public class ModuleManager {
         registerModule(new AutoRespawnModule());
         registerModule(new KeepSprintModule());
         registerModule(new WTapModule());
-        registerModule(new JumpResetModule());
+        registerModule(new JumpReset());
         registerModule(new AutoClickerModule());
         registerModule(new VelocityModule());
     }
