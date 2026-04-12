@@ -15,9 +15,9 @@ public class JumpReset extends Module {
     // Smart: only reset within resetTicks of being hit — avoids velocityVL2 air accumulation.
     // Vanilla: reset on any landing while hurtTime > 0.
     private final ModeSetting    mode       = new ModeSetting("Mode", Arrays.asList("Smart", "Vanilla"), "Smart");
-    private final NumberSetting  minFall    = new NumberSetting("MinFall",    0.0, 0.6,  0.05, 0.01);
-    private final NumberSetting  resetTicks = new NumberSetting("ResetTicks", 1.0, 8.0,  3.0,  1.0);
-    private final NumberSetting  cooldown   = new NumberSetting("Cooldown",   8.0, 25.0, 14.0, 1.0);
+    private final NumberSetting  minFall    = new NumberSetting("MinFall",    0.0,  0.0,  0.6,  0.01);
+    private final NumberSetting  resetTicks = new NumberSetting("ResetTicks", 3.0,  1.0,  8.0,  1.0);
+    private final NumberSetting  cooldown   = new NumberSetting("Cooldown",   14.0, 8.0,  25.0, 1.0);
     private final BooleanSetting debug      = new BooleanSetting("Debug", false);
 
     private double  prevMotionY   = 0.0;
@@ -64,8 +64,8 @@ public class JumpReset extends Module {
                 && inWindow
                 && cooldownTimer == 0) {
 
-            // 0.42 = standard jump force. Delta vs typical knockback Y (~0.40)
-            // is 0.02, under Intave's 0.09 threshold for hadYVelocityStartMotion.
+            // 0.42 = standard jump force. Satisfies Intave's hadYVelocityStartMotion
+            // check (requires velocitySqY >= 0.09; 0.42^2 = 0.176 >> threshold).
             // Ground friction handles XZ naturally — avoids bad5 flag.
             mc.player.motionY    = 0.42;
             mc.player.isAirBorne = true;
