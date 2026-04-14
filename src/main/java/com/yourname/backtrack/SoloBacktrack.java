@@ -11,6 +11,7 @@ import com.yourname.backtrack.module.ModuleManager;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
+import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
 
 @Mod(modid = "solobacktrack", name = "Solo Backtrack", version = "1.0")
 public class SoloBacktrack {
@@ -40,6 +41,11 @@ public class SoloBacktrack {
     @Mod.EventHandler
     public void init(FMLInitializationEvent event) {
         instance = this;
+    }
+
+    @Mod.EventHandler
+    public void postInit(FMLPostInitializationEvent event) {
+        // Minecraft.getMinecraft() is guaranteed non-null by postInit
         moduleManager = new ModuleManager();
         hudSettings = new HudSettings();
         configManager = new ConfigManager();
