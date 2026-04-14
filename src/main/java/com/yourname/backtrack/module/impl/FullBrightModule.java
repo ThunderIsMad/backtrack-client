@@ -3,7 +3,7 @@ package com.yourname.backtrack.module.impl;
 import com.yourname.backtrack.module.Category;
 import com.yourname.backtrack.module.Module;
 import com.yourname.backtrack.setting.NumberSetting;
-import net.minecraft.client.GameSettings;
+import net.minecraft.client.settings.GameSettings;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
