@@ -20,7 +20,12 @@ import java.util.function.Consumer;
 
 public abstract class Module {
 
-    protected final Minecraft mc = Minecraft.getMinecraft();
+    // Never store as a field — getMinecraft() must be called at runtime, not class-load time,
+    // because in the obfuscated environment the method name is func_71410_x and the
+    // field initializer fires before ForgeGradle's remapper has a chance to resolve it.
+    protected static Minecraft mc() {
+        return Minecraft.getMinecraft();
+    }
 
     private static final List<String> HUD_COLOR_NAMES = Arrays.asList(
             "White", "Red", "Green", "Blue", "Yellow", "Cyan", "Orange", "Pink", "Rainbow"
@@ -64,8 +69,8 @@ public abstract class Module {
     }
 
     public void setKeyCode(int keyCode) {
-        if (mc.gameSettings != null) {
-            mc.gameSettings.setOptionKeyBinding(keyBinding, keyCode);
+        if (mc().gameSettings != null) {
+            mc().gameSettings.setOptionKeyBinding(keyBinding, keyCode);
         } else {
             keyBinding.setKeyCode(keyCode);
         }
@@ -115,8 +120,8 @@ public abstract class Module {
     }
 
     protected void sendClientMessage(String message) {
-        if (mc.player != null) {
-            mc.player.sendMessage(new TextComponentString(message));
+        if (mc().player != null) {
+            mc().player.sendMessage(new TextComponentString(message));
         }
     }
 
@@ -193,7 +198,7 @@ public abstract class Module {
 
     protected ActionSetting createOpenHudEditorSetting() {
         return new ActionSetting("Open HUD Editor", context ->
-                mc.displayGuiScreen(new HudEditorScreen(
+                mc().displayGuiScreen(new HudEditorScreen(
                         context.getClickGuiScreen(),
                         context.getModuleManager(),
                         context.getConfigManager(),
