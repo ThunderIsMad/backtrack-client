@@ -30,33 +30,28 @@ public class AutoClickerModule extends Module {
     @SubscribeEvent
     public void onClientTick(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.START) return;
-        if (!isEnabled() || mc.player == null || mc.world == null) return;
+        if (!isEnabled() || mc().player == null || mc().world == null) return;
 
-        // Only fire while left mouse button is held
         if (!Mouse.isButtonDown(0)) {
             ticksUntilClick = 0;
             return;
         }
 
-        // Don't click while a GUI is open
-        if (mc.currentScreen != null) return;
+        if (mc().currentScreen != null) return;
 
         if (ticksUntilClick > 0) {
             ticksUntilClick--;
             return;
         }
 
-        // Must be looking at an entity — match vanilla RayTrace type check
-        RayTraceResult mop = mc.objectMouseOver;
+        RayTraceResult mop = mc().objectMouseOver;
         if (mop == null) return;
         if (mop.typeOfHit != RayTraceResult.Type.ENTITY) return;
         if (mop.entityHit == null) return;
 
-        // Attack exactly like vanilla left-click does
-        mc.playerController.attackEntity(mc.player, mop.entityHit);
-        mc.player.swingArm(net.minecraft.util.EnumHand.MAIN_HAND);
+        mc().playerController.attackEntity(mc().player, mop.entityHit);
+        mc().player.swingArm(net.minecraft.util.EnumHand.MAIN_HAND);
 
-        // Schedule next click with humanized jitter
         double min = Math.max(1, minCps.getValue());
         double max = Math.max(min, maxCps.getValue());
         double cps = min + Math.random() * (max - min);
