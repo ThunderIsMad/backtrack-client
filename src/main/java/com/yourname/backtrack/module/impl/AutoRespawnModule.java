@@ -10,7 +10,7 @@ import org.lwjgl.input.Keyboard;
 public class AutoRespawnModule extends Module {
 
     public AutoRespawnModule() {
-        super("AutoRespawn", Category.PLAYER, Keyboard.KEY_NONE);
+        super("AutoRespawn", Category.MISC, Keyboard.KEY_NONE);
         addHudSettings();
     }
 
