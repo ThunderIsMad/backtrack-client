@@ -29,12 +29,14 @@ public class MixinNetHandlerPlayClient {
     /**
      * Intercept incoming velocity packets so JumpResetModule can detect fall damage.
      * Fall damage packet: vx == 0, vz == 0, vy < 0 (pure downward, no horizontal KB).
+     * MCP 1.12.2: getter is getEntityID() (capital ID), not getEntityId().
      */
     @Inject(method = "handleEntityVelocity", at = @At("HEAD"))
     private void onHandleEntityVelocity(SPacketEntityVelocity packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.player == null) return;
-        if (packet.getEntityId() != mc.player.getEntityId()) return;
+        // MCP 1.12.2 mapping: getEntityID() — capital ID
+        if (packet.getEntityID() != mc.player.getEntityId()) return;
 
         SoloBacktrack mod = SoloBacktrack.getInstance();
         if (mod == null) return;

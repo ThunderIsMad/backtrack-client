@@ -9,6 +9,7 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Mouse;
 import org.lwjgl.input.Keyboard;
+
 import java.util.Random;
 
 public class AutoClickerModule extends Module {
@@ -34,7 +35,8 @@ public class AutoClickerModule extends Module {
         nextDelay = 0;
         wasLookingAtEntity = false;
         if (mc().gameSettings != null) {
-            mc().gameSettings.keyBindAttack.setPressed(Mouse.isButtonDown(0));
+            // Sync key state to actual mouse button on disable
+            KeyBinding.setKeyBindState(mc().gameSettings.keyBindAttack.getKeyCode(), Mouse.isButtonDown(0));
         }
     }
 
@@ -46,9 +48,7 @@ public class AutoClickerModule extends Module {
 
         if (!Mouse.isButtonDown(0)) {
             lastClickTime = 0;
-            if (mc().gameSettings.keyBindAttack.isKeyDown()) {
-                mc().gameSettings.keyBindAttack.setPressed(false);
-            }
+            KeyBinding.setKeyBindState(mc().gameSettings.keyBindAttack.getKeyCode(), false);
             return;
         }
 
@@ -73,7 +73,7 @@ public class AutoClickerModule extends Module {
         lastYaw = mc().player.rotationYaw;
 
         if (lastClickTime == 0 || currentTime - lastClickTime >= nextDelay) {
-            mc().gameSettings.keyBindAttack.setPressed(true);
+            KeyBinding.setKeyBindState(mc().gameSettings.keyBindAttack.getKeyCode(), true);
             KeyBinding.onTick(mc().gameSettings.keyBindAttack.getKeyCode());
 
             lastClickTime = currentTime;
@@ -87,9 +87,8 @@ public class AutoClickerModule extends Module {
 
             long dropVariance = (random.nextInt(100) > 95) ? (long)(random.nextDouble() * 45) : 0L;
             nextDelay = (long)(1000.0 / finalCps) + dropVariance;
-
         } else {
-            mc().gameSettings.keyBindAttack.setPressed(false);
+            KeyBinding.setKeyBindState(mc().gameSettings.keyBindAttack.getKeyCode(), false);
         }
     }
 
