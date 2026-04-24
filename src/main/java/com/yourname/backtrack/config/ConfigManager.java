@@ -16,15 +16,28 @@ import java.util.Properties;
 
 public class ConfigManager {
 
-    private final File file;
+    private File file = null;
     private Properties cachedProperties = null;
 
     public ConfigManager() {
-        File configDir = new File(Minecraft.getMinecraft().mcDataDir, "backtrack");
-        if (!configDir.exists()) {
-            configDir.mkdirs();
+        // Do NOT call Minecraft.getMinecraft() here.
+        // The constructor is invoked during @PostInit while the obfuscated
+        // runtime maps getMinecraft() to func_71410_x.  Calling it at
+        // class-init time raises NoSuchMethodError before Minecraft is ready.
+        // Instead, resolve the file lazily on first access via getFile().
+    }
+
+    // Lazily resolve the config file so Minecraft.getMinecraft() is only
+    // called after the game has fully initialised its instance.
+    private File getFile() {
+        if (file == null) {
+            File configDir = new File(Minecraft.getMinecraft().mcDataDir, "backtrack");
+            if (!configDir.exists()) {
+                configDir.mkdirs();
+            }
+            file = new File(configDir, "solobacktrack.properties");
         }
-        file = new File(configDir, "solobacktrack.properties");
+        return file;
     }
 
     // --- GUI position ---
@@ -214,8 +227,9 @@ public class ConfigManager {
     private Properties loadProperties() {
         if (cachedProperties != null) return cachedProperties;
         Properties p = new Properties();
-        if (file.exists()) {
-            try (InputStream in = new FileInputStream(file)) {
+        File f = getFile();
+        if (f.exists()) {
+            try (InputStream in = new FileInputStream(f)) {
                 p.load(in);
             } catch (IOException e) {
                 System.err.println("[ConfigManager] Failed to load config: " + e.getMessage());
@@ -226,7 +240,7 @@ public class ConfigManager {
     }
 
     private void saveProperties(Properties p) {
-        try (OutputStream out = new FileOutputStream(file)) {
+        try (OutputStream out = new FileOutputStream(getFile())) {
             p.store(out, "Backtrack config");
             cachedProperties = null;
         } catch (IOException e) {
