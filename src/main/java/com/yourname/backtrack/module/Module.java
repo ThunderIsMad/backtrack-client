@@ -13,6 +13,7 @@ import net.minecraft.util.text.TextComponentString;
 import org.lwjgl.input.Keyboard;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -21,7 +22,6 @@ import java.util.function.Consumer;
 
 public abstract class Module {
 
-    // Must be called at runtime only — never at class-load or postInit time.
     protected static Minecraft mc() {
         return Minecraft.getMinecraft();
     }
@@ -31,21 +31,20 @@ public abstract class Module {
     );
 
     /**
-     * Resolved once on first use. Tries the MCP deobf name "keyCode" first,
-     * then falls back to the SRG-obfuscated name "field_151462_b" used in the
-     * production jar. Both refer to the same private int field on KeyBinding.
+     * Finds the keyCode field on KeyBinding by scanning all non-static int fields
+     * and picking the one whose value on a probe instance matches the key passed
+     * to the constructor. Works regardless of obfuscation level.
      */
-    private static Field keyBindingKeyCodeField;
-
-    private static Field resolveKeyCodeField() {
-        if (keyBindingKeyCodeField != null) return keyBindingKeyCodeField;
-        for (String name : new String[]{"keyCode", "field_151462_b"}) {
+    private static Field resolveKeyCodeField(KeyBinding probe, int expectedKey) {
+        for (Field f : KeyBinding.class.getDeclaredFields()) {
+            if (f.getType() != int.class) continue;
+            if (Modifier.isStatic(f.getModifiers())) continue;
+            f.setAccessible(true);
             try {
-                Field f = KeyBinding.class.getDeclaredField(name);
-                f.setAccessible(true);
-                keyBindingKeyCodeField = f;
-                return f;
-            } catch (NoSuchFieldException ignored) {
+                if (f.getInt(probe) == expectedKey) {
+                    return f;
+                }
+            } catch (IllegalAccessException ignored) {
             }
         }
         throw new RuntimeException("[Backtrack] Could not find KeyBinding keyCode field");
@@ -57,15 +56,17 @@ public abstract class Module {
     private final ModuleHudSettings hudSettings;
     private final List<Setting> settings = new ArrayList<>();
     private boolean enabled;
-
-    // Plain int field — our own shadow of the keybind code.
     private int keyCode;
+
+    // Field resolved once per module instance during construction.
+    private final Field keyCodeField;
 
     public Module(String name, Category category, int defaultKey) {
         this.name = name;
         this.category = category;
         this.keyCode = defaultKey;
         this.keyBinding = new KeyBinding(name, defaultKey, "Solo Backtrack");
+        this.keyCodeField = resolveKeyCodeField(this.keyBinding, defaultKey);
         this.hudSettings = new ModuleHudSettings(name);
         this.enabled = false;
     }
@@ -88,18 +89,14 @@ public abstract class Module {
         return keyBinding;
     }
 
-    // Returns our own int — never calls KeyBinding.getKeyCode() (obfuscated in production).
     public int getKeyCode() {
         return keyCode;
     }
 
-    // Uses reflection to write the private keyCode field on KeyBinding.
-    // Works in both deobf (dev, field name "keyCode") and obf (production,
-    // field name "field_151462_b") environments.
     public void setKeyCode(int keyCode) {
         this.keyCode = keyCode;
         try {
-            resolveKeyCodeField().setInt(keyBinding, keyCode);
+            keyCodeField.setInt(keyBinding, keyCode);
         } catch (IllegalAccessException e) {
             throw new RuntimeException("[Backtrack] Failed to set KeyBinding keyCode", e);
         }
