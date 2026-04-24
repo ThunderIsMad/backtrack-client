@@ -100,7 +100,6 @@ public abstract class Module {
         } catch (IllegalAccessException e) {
             throw new RuntimeException("[Backtrack] Failed to set KeyBinding keyCode", e);
         }
-        KeyBinding.resetKeyBindingArrayAndHash();
     }
 
     public String getKeyName() {
