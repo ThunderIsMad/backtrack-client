@@ -20,9 +20,7 @@ import java.util.function.Consumer;
 
 public abstract class Module {
 
-    // Never store as a field — getMinecraft() must be called at runtime, not class-load time,
-    // because in the obfuscated environment the method name is func_71410_x and the
-    // field initializer fires before ForgeGradle's remapper has a chance to resolve it.
+    // Never store as a field — must be called at runtime after Minecraft initialises.
     protected static Minecraft mc() {
         return Minecraft.getMinecraft();
     }
@@ -38,9 +36,13 @@ public abstract class Module {
     private final List<Setting> settings = new ArrayList<>();
     private boolean enabled;
 
+    // Plain int — never goes through any obfuscated KeyBinding method at load time.
+    private int keyCode;
+
     public Module(String name, Category category, int defaultKey) {
         this.name = name;
         this.category = category;
+        this.keyCode = defaultKey;
         this.keyBinding = new KeyBinding(name, defaultKey, "Solo Backtrack");
         this.hudSettings = new ModuleHudSettings(name);
         this.enabled = false;
@@ -64,24 +66,29 @@ public abstract class Module {
         return keyBinding;
     }
 
+    // Returns our own int — never calls KeyBinding.getKeyCode() (obfuscated in production).
     public int getKeyCode() {
-        return keyBinding.getKeyCode();
+        return keyCode;
     }
 
     public void setKeyCode(int keyCode) {
-        if (mc().gameSettings != null) {
+        this.keyCode = keyCode;
+        // gameSettings.setOptionKeyBinding is also an MCP name; only call it
+        // when Minecraft is fully initialised (i.e. from a live game event),
+        // never from postInit / config loading.
+        if (mc() != null && mc().gameSettings != null) {
             mc().gameSettings.setOptionKeyBinding(keyBinding, keyCode);
+            KeyBinding.resetKeyBindingArrayAndHash();
         } else {
             keyBinding.setKeyCode(keyCode);
         }
-        KeyBinding.resetKeyBindingArrayAndHash();
     }
 
     public String getKeyName() {
-        if (keyBinding.getKeyCode() == Keyboard.KEY_NONE) {
+        if (keyCode == Keyboard.KEY_NONE) {
             return "NONE";
         }
-        return Keyboard.getKeyName(keyBinding.getKeyCode());
+        return Keyboard.getKeyName(keyCode);
     }
 
     public ModuleHudSettings getHudSettings() {
