@@ -5,258 +5,293 @@ import com.yourname.backtrack.module.Module;
 import com.yourname.backtrack.setting.BooleanSetting;
 import com.yourname.backtrack.setting.ModeSetting;
 import com.yourname.backtrack.setting.NumberSetting;
+import net.minecraft.client.Minecraft;
 import net.minecraft.network.play.client.CPacketPlayer;
 import net.minecraftforge.client.event.InputUpdateEvent;
 import org.lwjgl.input.Keyboard;
 
 import java.util.Arrays;
-import java.util.Random;
 
 /**
- * Velocity — full Augustus logic adapted for backtrack-client.
+ * Velocity — Augustus-logic adapted for backtrack-client / Forge 1.12.2.
  *
- * Modes: Basic, Legit, PushGround, Push, Intave, Reverse, Spoof
+ * Modes: Basic, Legit, PushGround, Push, IntvAC, Reverse, Spoof
  *
- * Packet handling (Basic / Spoof) is done in MixinNetHandlerPlayClient
- * via handleVelocityPacket(). Per-tick logic runs in onInputUpdate().
+ * Packet handling (Basic / Legit / IntvAC / Spoof) → MixinNetHandlerPlayClient
+ *   via handleVelocityPacket().
+ * Per-tick motion logic (IntvAC jump, Push, Reverse, PushGround, Spoof send)
+ *   → onInputUpdate(), which fires right before the outgoing position packet.
  *
- * Augustus EventSilentMove  → onInputUpdate (pre-motion, before pos packet)
- * Augustus EventUpdate       → onInputUpdate tick logic
- * Augustus EventReadPacket   → MixinNetHandlerPlayClient
- * Augustus moveFlying()      → manual yaw impulse (not in 1.12.2 MCP)
+ * Augustus EventReadPacket  → handleVelocityPacket()
+ * Augustus EventSilentMove  → onInputUpdate()
+ * Augustus EventUpdate      → onInputUpdate()
+ * Augustus moveFlying()     → manual yaw impulse (moveFlying absent in 1.12.2 MCP)
  */
 public class VelocityModule extends Module {
 
-    // --- Settings (all NumberSetting args are int, matching existing modules) ---
+    // ── Mode ──────────────────────────────────────────────────────────────────
 
-    private final ModeSetting    mode          = new ModeSetting("Mode",
-            Arrays.asList("Basic", "Legit", "PushGround", "Push", "Intave", "Reverse", "Spoof"),
+    private final ModeSetting mode = new ModeSetting("Mode",
+            Arrays.asList("Basic", "Legit", "PushGround", "Push", "IntvAC", "Reverse", "Spoof"),
             "Basic");
 
-    // Basic
-    private final NumberSetting  xzVelocity    = new NumberSetting("XZVelocity",    20,  0, 100, 1);
-    private final NumberSetting  yVelocity     = new NumberSetting("YVelocity",     20,  0, 100, 1);
-    private final BooleanSetting ignoreExplosion = new BooleanSetting("Explosion",  true);
+    // ── Basic / Legit ─────────────────────────────────────────────────────────
 
-    // Intave
-    // XZVelocity for packet scale: 0..100 stored as int, -100..100 semantics kept
-    // by using signed range; divide by 100 when applied
-    private final NumberSetting  xzValueIntave = new NumberSetting("IntaveXZScale", 60, -100, 100, 1);
-    private final BooleanSetting jumpIntave    = new BooleanSetting("Jump",         false);
+    /** XZ scale 0–100 %; 0 = cancel packet entirely. */
+    private final NumberSetting xzVelocity = new NumberSetting("XZVelocity", 20.0, 0.0, 100.0, 1.0);
+    /** Y scale 0–100 %; only applied in Basic. */
+    private final NumberSetting yVelocity  = new NumberSetting("YVelocity",  20.0, 0.0, 100.0, 1.0);
 
-    // Push — forward impulse using yaw direction
-    // pushXZ * 0.01 = actual speed added per tick (range 0.01..0.20)
-    private final NumberSetting  pushXZ        = new NumberSetting("Push",          11,  1, 200, 1);
-    private final NumberSetting  pushStart     = new NumberSetting("PushStart",     9,   1,  10, 1);
-    private final NumberSetting  pushEnd       = new NumberSetting("PushEnd",       2,   1,  10, 1);
-    private final BooleanSetting pushOnGround  = new BooleanSetting("OnGround",     false);
+    // ── IntvAC (Intave KnockbackCheck bypass) ────────────────────────────────
 
-    // Reverse
-    private final NumberSetting  reverseStart  = new NumberSetting("ReverseStart",  9,   1,  10, 1);
+    /** XZ packet scale −100–100 %. Negative = reverse. */
+    private final NumberSetting  xzScaleIntvAC = new NumberSetting("IntvACXZScale", 60.0, -100.0, 100.0, 1.0);
+    /** Every other KB hit: jump on hurtTime == 9 to satisfy hadYVelocityStartMotion. */
+    private final BooleanSetting jumpIntvAC    = new BooleanSetting("IntvACJump", false);
+
+    // ── Push ──────────────────────────────────────────────────────────────────
+
+    /** Forward impulse per tick = pushXZ * 0.01. */
+    private final NumberSetting  pushXZ       = new NumberSetting("PushSpeed",  11.0,  1.0, 200.0, 1.0);
+    private final NumberSetting  pushStart    = new NumberSetting("PushStart",   9.0,  1.0,  10.0, 1.0);
+    private final NumberSetting  pushEnd      = new NumberSetting("PushEnd",     2.0,  1.0,  10.0, 1.0);
+    private final BooleanSetting pushOnGround = new BooleanSetting("PushOnGround", false);
+
+    // ── Reverse ───────────────────────────────────────────────────────────────
+
+    private final NumberSetting  reverseStart  = new NumberSetting("ReverseStart",  9.0, 1.0, 10.0, 1.0);
     private final BooleanSetting reverseStrafe = new BooleanSetting("ReverseStrafe", false);
 
-    // ReduceOnAttack (LiquidBounce VelocityIntave)
-    private final BooleanSetting reduceOnAttack  = new BooleanSetting("ReduceOnAttack", true);
-    private final NumberSetting  reduceFactor     = new NumberSetting("ReduceFactor",   60,  0, 100, 5);
-    private final NumberSetting  hurtTimeMin      = new NumberSetting("HurtTimeMin",    5,   1,  10, 1);
-    private final NumberSetting  hurtTimeMax      = new NumberSetting("HurtTimeMax",    7,   1,  10, 1);
-    private final NumberSetting  attackWindowMs   = new NumberSetting("AttackWindowMs", 2000, 100, 5000, 100);
+    // ── ReduceOnAttack (LiquidBounce VelocityIntvAC) ─────────────────────────
 
-    // --- State ---
-    private int     counter          = 0;   // Intave jump every-other-hit counter
+    private final BooleanSetting reduceOnAttack = new BooleanSetting("ReduceOnAttack", true);
+    /** XZ multiplier when ReduceOnAttack fires (0–100 %). */
+    private final NumberSetting  reduceFactor   = new NumberSetting("ReduceFactor",   60.0,   0.0, 100.0,   5.0);
+    private final NumberSetting  hurtTimeMin    = new NumberSetting("HurtTimeMin",     5.0,   1.0,  10.0,   1.0);
+    private final NumberSetting  hurtTimeMax    = new NumberSetting("HurtTimeMax",     7.0,   1.0,  10.0,   1.0);
+    private final NumberSetting  attackWindowMs = new NumberSetting("AttackWindowMs", 2000.0, 100.0, 5000.0, 100.0);
+
+    // ── State ─────────────────────────────────────────────────────────────────
+
+    /** IntvAC: fire jump on every other hit (counter % 2 == 0). */
+    private int     intvACCounter    = 0;
+    /** Spoof: true for one tick after cancelling the velocity packet. */
     private boolean spoofPending     = false;
     private double  spoofX, spoofY, spoofZ;
     private long    lastAttackTimeMs = 0L;
-    private int     lastAttackTick   = -100;
+
+    // ─────────────────────────────────────────────────────────────────────────
 
     public VelocityModule() {
         super("Velocity", Category.COMBAT, Keyboard.KEY_NONE);
-        addSettings(
-                mode,
-                xzVelocity, yVelocity, ignoreExplosion,
-                xzValueIntave, jumpIntave,
-                pushXZ, pushStart, pushEnd, pushOnGround,
-                reverseStart, reverseStrafe,
-                reduceOnAttack, reduceFactor, hurtTimeMin, hurtTimeMax, attackWindowMs
-        );
+        addSetting(mode);
+        addSetting(xzVelocity);
+        addSetting(yVelocity);
+        addSetting(xzScaleIntvAC);
+        addSetting(jumpIntvAC);
+        addSetting(pushXZ);
+        addSetting(pushStart);
+        addSetting(pushEnd);
+        addSetting(pushOnGround);
+        addSetting(reverseStart);
+        addSetting(reverseStrafe);
+        addSetting(reduceOnAttack);
+        addSetting(reduceFactor);
+        addSetting(hurtTimeMin);
+        addSetting(hurtTimeMax);
+        addSetting(attackWindowMs);
         addHudSettings();
     }
 
     @Override
     public void onDisable() {
-        counter      = 0;
-        spoofPending = false;
+        intvACCounter = 0;
+        spoofPending  = false;
     }
 
     // =========================================================================
-    // Packet handling — called by MixinNetHandlerPlayClient
-    // Mirrors Augustus onEventReadPacket for Basic and Spoof modes.
-    // Returns true to cancel the packet, false to let it through.
+    // Packet layer — called by MixinNetHandlerPlayClient.onHandleEntityVelocity
+    // Returns true  → cancel the packet (velocity not applied by vanilla).
+    // Returns false → let the (possibly modified) packet through.
     // =========================================================================
 
     public boolean handleVelocityPacket(SPacketEntityVelocityAccessor packet) {
-        if (!isEnabled() || mc().player == null) return false;
+        if (!isEnabled() || Minecraft.getMinecraft().player == null) return false;
 
-        String m = mode.getValue();
+        switch (mode.getValue()) {
 
-        if (m.equals("Basic")) {
-            double xz = xzVelocity.getValue();
-            double y  = yVelocity.getValue();
-            if (xz > 0.0 || y > 0.0) {
+            case "Basic": {
+                double xz = xzVelocity.getValue();
+                double y  = yVelocity.getValue();
+                if (xz <= 0.0 && y <= 0.0) return true; // full cancel
                 packet.setMotionX((int)(packet.getMotionX() * xz / 100.0));
                 packet.setMotionY((int)(packet.getMotionY() * y  / 100.0));
                 packet.setMotionZ((int)(packet.getMotionZ() * xz / 100.0));
                 return false;
             }
-            return true; // cancel
-        }
 
-        if (m.equals("Intave")) {
-            double scale = xzValueIntave.getValue() / 100.0;
-            packet.setMotionX((int)(packet.getMotionX() * scale));
-            packet.setMotionZ((int)(packet.getMotionZ() * scale));
-            return false;
-        }
+            case "Legit": {
+                // Subtle reduce — XZ only, Y untouched so it looks natural.
+                double xz = xzVelocity.getValue();
+                if (xz <= 0.0) return true;
+                packet.setMotionX((int)(packet.getMotionX() * xz / 100.0));
+                packet.setMotionZ((int)(packet.getMotionZ() * xz / 100.0));
+                return false;
+            }
 
-        if (m.equals("Spoof")) {
-            // Augustus: cancel + send fake position offset
-            spoofX = packet.getMotionX() / 8000.0;
-            spoofY = packet.getMotionY() / 8000.0;
-            spoofZ = packet.getMotionZ() / 8000.0;
-            spoofPending = true;
-            return true;
-        }
+            case "IntvAC": {
+                // Scale XZ; may be negative to partially reverse the knockback vector.
+                // Satisfies Intave bad5 (xz_increasement) by keeping a non-zero value.
+                double scale = xzScaleIntvAC.getValue() / 100.0;
+                packet.setMotionX((int)(packet.getMotionX() * scale));
+                packet.setMotionZ((int)(packet.getMotionZ() * scale));
+                return false;
+            }
 
-        return false;
+            case "Spoof": {
+                // Augustus Spoof: cancel the real packet, then on the next tick send
+                // a fake position offset equal to the velocity delta, so the server
+                // thinks we moved but our client ignores the knockback.
+                spoofX = packet.getMotionX() / 8000.0;
+                spoofY = packet.getMotionY() / 8000.0;
+                spoofZ = packet.getMotionZ() / 8000.0;
+                spoofPending = true;
+                return true;
+            }
+
+            default:
+                return false;
+        }
     }
 
     // =========================================================================
-    // Per-tick logic — onInputUpdate
-    // Mirrors Augustus onEventSilentMove + onEventUpdate.
-    // Fires before the outgoing position packet, exactly like EventSilentMove.
+    // Tick layer — fires before the outgoing C03 position packet.
+    // Covers: Spoof deferred send, IntvAC jump, PushGround, Push, Reverse.
     // =========================================================================
 
     @Override
     public void onInputUpdate(InputUpdateEvent event) {
-        if (!isEnabled() || mc().player == null || mc().world == null) return;
+        Minecraft mc = Minecraft.getMinecraft();
+        if (!isEnabled() || mc.player == null || mc.world == null) return;
 
-        // Spoof: send the fake offset position on the tick after cancelling the packet
+        // Spoof: send the fake position offset one tick after cancelling the packet.
         if (spoofPending) {
-            mc().player.connection.sendPacket(new CPacketPlayer.Position(
-                    mc().player.posX + spoofX,
-                    mc().player.posY + spoofY,
-                    mc().player.posZ + spoofZ,
+            mc.player.connection.sendPacket(new CPacketPlayer.Position(
+                    mc.player.posX + spoofX,
+                    mc.player.posY + spoofY,
+                    mc.player.posZ + spoofZ,
                     false
             ));
             spoofPending = false;
         }
 
         switch (mode.getValue()) {
-            case "Intave":     handleIntave();     break;
-            case "PushGround": handlePushGround(); break;
-            case "Push":       handlePush();       break;
-            case "Reverse":    handleReverse();    break;
+            case "IntvAC":     handleIntvAC(mc);     break;
+            case "PushGround": handlePushGround(mc); break;
+            case "Push":       handlePush(mc);       break;
+            case "Reverse":    handleReverse(mc);    break;
         }
     }
 
-    // Augustus case "Intave" in onEventSilentMove:
-    // if (jumpIntave && hurtTime == 9 && onGround && counter++ % 2 == 0) jump = true
-    // In 1.12.2 we cannot set movementInput.jump from InputUpdateEvent directly,
-    // so we replicate the effect by setting motionY = 0.42 (vanilla jump force).
-    private void handleIntave() {
-        if (!jumpIntave.getValue()) return;
-        if (mc().player.hurtTime == 9 && mc().player.onGround && counter++ % 2 == 0) {
-            mc().player.motionY    = 0.42;
-            mc().player.isAirBorne = true;
+    // ── Per-mode tick handlers ────────────────────────────────────────────────
+
+    /**
+     * Augustus IntvAC case in onEventSilentMove:
+     *   if (jump && hurtTime == 9 && onGround && counter++ % 2 == 0) jump = true
+     *
+     * Setting motionY = 0.42 replicates vanilla jump force, satisfying Intave's
+     * hadYVelocityStartMotion check (requires velocitySqY >= 0.09; 0.42² = 0.176).
+     * Firing only every other hit avoids velocityVL2 accumulation.
+     */
+    private void handleIntvAC(Minecraft mc) {
+        if (!jumpIntvAC.getValue()) return;
+        if (mc.player.hurtTime == 9 && mc.player.onGround && intvACCounter++ % 2 == 0) {
+            mc.player.motionY    = 0.42;
+            mc.player.isAirBorne = true;
         }
     }
 
-    // Augustus pushGround()
-    private void handlePushGround() {
-        if (mc().player.hurtTime > 0) {
-            mc().player.onGround = true;
+    /**
+     * Augustus pushGround(): forces onGround = true while hurt so the server
+     * treats the player as grounded, bypassing air-velocity checks.
+     */
+    private void handlePushGround(Minecraft mc) {
+        if (mc.player.hurtTime > 0) {
+            mc.player.onGround = true;
         }
     }
 
-    // Augustus push() — moveFlying does not exist in 1.12.2 MCP.
-    // Equivalent: apply yaw-direction impulse scaled by pushXZ * 0.01.
-    private void handlePush() {
-        int ht = mc().player.hurtTime;
+    /**
+     * Augustus push(): apply a forward yaw-direction impulse during the hurtTime
+     * window. moveFlying() doesn't exist in 1.12.2 MCP; yaw-based trig is equivalent.
+     */
+    private void handlePush(Minecraft mc) {
+        int ht = mc.player.hurtTime;
         int lo = (int) Math.min(pushStart.getValue(), pushEnd.getValue());
         int hi = (int) Math.max(pushStart.getValue(), pushEnd.getValue());
         if (ht >= lo && ht <= hi) {
-            double rad = Math.toRadians(mc().player.rotationYaw);
+            double rad = Math.toRadians(mc.player.rotationYaw);
             double spd = pushXZ.getValue() * 0.01;
-            mc().player.motionX += -Math.sin(rad) * spd;
-            mc().player.motionZ +=  Math.cos(rad) * spd;
+            mc.player.motionX += -Math.sin(rad) * spd;
+            mc.player.motionZ +=  Math.cos(rad) * spd;
             if (pushOnGround.getValue()) {
-                mc().player.onGround = true;
+                mc.player.onGround = true;
             }
         }
     }
 
-    // Augustus reverse() + onEventPostMotion strafe
-    private void handleReverse() {
-        int ht = mc().player.hurtTime;
+    /**
+     * Augustus reverse(): invert XZ velocity on the trigger tick, then optionally
+     * strafe perpendicular to facing for the remainder of the hurtTime window.
+     */
+    private void handleReverse(Minecraft mc) {
+        int ht = mc.player.hurtTime;
         if (ht == (int) reverseStart.getValue()) {
-            mc().player.motionX *= -1.0;
-            mc().player.motionZ *= -1.0;
+            mc.player.motionX *= -1.0;
+            mc.player.motionZ *= -1.0;
         }
         if (reverseStrafe.getValue() && ht > 0 && ht <= (int) reverseStart.getValue()) {
-            strafe();
+            strafe(mc);
         }
     }
 
     // =========================================================================
-    // ReduceOnAttack — called by MixinPlayerControllerMP on attack
-    // Adapted from LiquidBounce VelocityIntave ReduceOnAttack.
+    // ReduceOnAttack — called by MixinPlayerControllerMP.onAttackEntity
+    // Adapted from LiquidBounce VelocityIntvAC ReduceOnAttack.
+    // Multiplies XZ velocity when we attack while the target is in hurtTime window.
     // =========================================================================
 
     public void onAttack() {
-        if (!isEnabled() || mc().player == null) return;
+        Minecraft mc = Minecraft.getMinecraft();
+        if (!isEnabled() || mc.player == null) return;
         if (!reduceOnAttack.getValue()) return;
 
-        int  ht  = mc().player.hurtTime;
+        long now = System.currentTimeMillis();
+        int  ht  = mc.player.hurtTime;
         int  lo  = (int) hurtTimeMin.getValue();
         int  hi  = (int) hurtTimeMax.getValue();
-        long now = System.currentTimeMillis();
 
-        if (ht >= lo && ht <= hi
-                && (now - lastAttackTimeMs) <= (long) attackWindowMs.getValue()) {
+        if (ht >= lo && ht <= hi && (now - lastAttackTimeMs) <= (long) attackWindowMs.getValue()) {
             double f = reduceFactor.getValue() / 100.0;
-            mc().player.motionX *= f;
-            mc().player.motionZ *= f;
+            mc.player.motionX *= f;
+            mc.player.motionZ *= f;
         }
         lastAttackTimeMs = now;
-        if (mc().player != null) lastAttackTick = mc().player.ticksExisted;
+    }
+
+    // ── Utility ───────────────────────────────────────────────────────────────
+
+    /** Augustus MoveUtil.strafe(): redirect XZ at 90° to current facing, same speed. */
+    private void strafe(Minecraft mc) {
+        double yaw = Math.toRadians(mc.player.rotationYaw + 90.0);
+        double spd = Math.sqrt(mc.player.motionX * mc.player.motionX
+                             + mc.player.motionZ * mc.player.motionZ);
+        mc.player.motionX = Math.cos(yaw) * spd;
+        mc.player.motionZ = Math.sin(yaw) * spd;
     }
 
     // =========================================================================
-    // Legacy helpers — kept for mixin backward compatibility
-    // =========================================================================
-
-    public boolean shouldCancel() {
-        if (!isEnabled() || mc().player == null) return false;
-        return mc().player.hurtResistantTime > 0
-                || mc().player.ticksExisted - lastAttackTick < 40;
-    }
-
-    public void setLastAttackTick() {
-        if (mc().player != null) lastAttackTick = mc().player.ticksExisted;
-    }
-
-    // Strafe perpendicular to current facing (Augustus MoveUtil.strafe equivalent)
-    private void strafe() {
-        double yaw = Math.toRadians(mc().player.rotationYaw + 90.0);
-        double spd = Math.sqrt(
-                mc().player.motionX * mc().player.motionX +
-                mc().player.motionZ * mc().player.motionZ);
-        mc().player.motionX = Math.cos(yaw) * spd;
-        mc().player.motionZ = Math.sin(yaw) * spd;
-    }
-
-    // =========================================================================
-    // Accessor interface — implemented by MixinSPacketEntityVelocity
+    // Accessor interface — implemented by MixinSPacketEntityVelocity via @Accessor
     // =========================================================================
 
     public interface SPacketEntityVelocityAccessor {
