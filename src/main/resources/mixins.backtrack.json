@@ -5,6 +5,7 @@
   "compatibilityLevel": "JAVA_8",
   "client": [
     "client.MixinNetHandlerPlayClient",
-    "client.MixinPlayerControllerMP"
+    "client.MixinPlayerControllerMP",
+    "client.MixinSPacketEntityVelocity"
   ]
 }

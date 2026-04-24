@@ -2,6 +2,7 @@ package com.yourname.backtrack.mixin.client;
 
 import com.yourname.backtrack.SoloBacktrack;
 import com.yourname.backtrack.module.impl.JumpResetModule;
+import com.yourname.backtrack.module.impl.VelocityModule;
 import com.yourname.backtrack.util.FlagLogger;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.network.NetHandlerPlayClient;
@@ -19,35 +20,47 @@ public class MixinNetHandlerPlayClient {
     private void onHandlePlayerPosLook(SPacketPlayerPosLook packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.player == null || mc.world == null) return;
-
         SoloBacktrack mod = SoloBacktrack.getInstance();
         if (mod == null) return;
-
         FlagLogger.log(mod, mc, packet);
     }
 
     /**
-     * Intercept incoming velocity packets so JumpResetModule can detect fall damage.
-     * Fall damage packet: vx == 0, vz == 0, vy < 0 (pure downward, no horizontal KB).
-     * MCP 1.12.2: getter is getEntityID() (capital ID), not getEntityId().
+     * Intercept SPacketEntityVelocity before vanilla applies it.
+     *
+     * Responsibilities:
+     *  1. Notify JumpResetModule of fall-damage detection (vx=0, vz=0, vy<0).
+     *  2. Let VelocityModule modify or cancel the packet for Basic/Intave/Spoof modes.
+     *
+     * MCP 1.12.2: getter is getEntityID() (capital ID).
      */
-    @Inject(method = "handleEntityVelocity", at = @At("HEAD"))
+    @Inject(method = "handleEntityVelocity", at = @At("HEAD"), cancellable = true)
     private void onHandleEntityVelocity(SPacketEntityVelocity packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.player == null) return;
-        // MCP 1.12.2 mapping: getEntityID() — capital ID
         if (packet.getEntityID() != mc.player.getEntityId()) return;
 
         SoloBacktrack mod = SoloBacktrack.getInstance();
         if (mod == null) return;
 
+        // --- JumpReset fall damage detection ---
         JumpResetModule jr = mod.getModuleManager().getModule(JumpResetModule.class);
-        if (jr == null) return;
+        if (jr != null) {
+            double vx = packet.getMotionX() / 8000.0;
+            double vy = packet.getMotionY() / 8000.0;
+            double vz = packet.getMotionZ() / 8000.0;
+            jr.notifyVelocityPacket(vx, vy, vz);
+        }
 
-        // SPacketEntityVelocity stores velocity as integer (value * 8000)
-        double vx = packet.getMotionX() / 8000.0;
-        double vy = packet.getMotionY() / 8000.0;
-        double vz = packet.getMotionZ() / 8000.0;
-        jr.notifyVelocityPacket(vx, vy, vz);
+        // --- VelocityModule packet handling ---
+        VelocityModule vm = mod.getModuleManager().getModule(VelocityModule.class);
+        if (vm == null) return;
+
+        // Cast to accessor so VelocityModule can read/write the private int fields
+        VelocityModule.SPacketEntityVelocityAccessor accessor =
+                (VelocityModule.SPacketEntityVelocityAccessor)(Object) packet;
+
+        boolean cancel = vm.handleVelocityPacket(accessor);
+        if (cancel) ci.cancel();
     }
 }
