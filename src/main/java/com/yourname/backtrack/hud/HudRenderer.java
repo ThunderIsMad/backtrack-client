@@ -10,7 +10,6 @@ import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 
 public class HudRenderer {
 
-    private final Minecraft mc = Minecraft.getMinecraft();
     private final ModuleManager moduleManager;
     private final HudSettings hudSettings;
 
@@ -19,9 +18,13 @@ public class HudRenderer {
         this.hudSettings = hudSettings;
     }
 
+    private static Minecraft mc() {
+        return Minecraft.getMinecraft();
+    }
+
     @SubscribeEvent
     public void onRenderGameOverlay(RenderGameOverlayEvent.Text event) {
-        if (mc.player == null || mc.world == null) return;
+        if (mc().player == null || mc().world == null) return;
         if (!hudSettings.isVisible()) return;
 
         for (Module module : moduleManager.getModules()) {
@@ -39,18 +42,17 @@ public class HudRenderer {
                 Gui.drawRect(
                         x - 2,
                         y - 1,
-                        x + mc.fontRenderer.getStringWidth(text) + 3,
-                        y + mc.fontRenderer.FONT_HEIGHT + 1,
+                        x + mc().fontRenderer.getStringWidth(text) + 3,
+                        y + mc().fontRenderer.FONT_HEIGHT + 1,
                         0x70000000
                 );
             }
 
             if (moduleHud.isShadow()) {
-                mc.fontRenderer.drawStringWithShadow(text, x, y, moduleHud.getTextColor());
+                mc().fontRenderer.drawStringWithShadow(text, x, y, moduleHud.getTextColor());
             } else {
-                mc.fontRenderer.drawString(text, x, y, moduleHud.getTextColor());
+                mc().fontRenderer.drawString(text, x, y, moduleHud.getTextColor());
             }
         }
     }
 }
-
