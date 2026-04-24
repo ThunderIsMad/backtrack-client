@@ -9,35 +9,27 @@ import com.yourname.backtrack.setting.ModeSetting;
 import com.yourname.backtrack.setting.NumberSetting;
 import com.yourname.backtrack.setting.Setting;
 import com.yourname.backtrack.module.ModuleManager;
-import net.minecraft.client.Minecraft;
+import net.minecraft.launchwrapper.Launch;
 
 import java.io.*;
 import java.util.Properties;
 
 public class ConfigManager {
 
-    private File file = null;
+    private final File file;
     private Properties cachedProperties = null;
 
     public ConfigManager() {
-        // Do NOT call Minecraft.getMinecraft() here.
-        // The constructor is invoked during @PostInit while the obfuscated
-        // runtime maps getMinecraft() to func_71410_x.  Calling it at
-        // class-init time raises NoSuchMethodError before Minecraft is ready.
-        // Instead, resolve the file lazily on first access via getFile().
-    }
-
-    // Lazily resolve the config file so Minecraft.getMinecraft() is only
-    // called after the game has fully initialised its instance.
-    private File getFile() {
-        if (file == null) {
-            File configDir = new File(Minecraft.getMinecraft().mcDataDir, "backtrack");
-            if (!configDir.exists()) {
-                configDir.mkdirs();
-            }
-            file = new File(configDir, "solobacktrack.properties");
+        // Launch.minecraftHome is set by LaunchWrapper before any mod code runs.
+        // It is a plain Java field on a non-obfuscated class, so it resolves
+        // identically in both the dev workspace and the production obfuscated jar.
+        // This avoids calling Minecraft.getMinecraft().mcDataDir, whose MCP field
+        // name (mcDataDir / field_71412_aA) is unreliable at postInit time.
+        File configDir = new File(Launch.minecraftHome, "backtrack");
+        if (!configDir.exists()) {
+            configDir.mkdirs();
         }
-        return file;
+        file = new File(configDir, "solobacktrack.properties");
     }
 
     // --- GUI position ---
@@ -227,9 +219,8 @@ public class ConfigManager {
     private Properties loadProperties() {
         if (cachedProperties != null) return cachedProperties;
         Properties p = new Properties();
-        File f = getFile();
-        if (f.exists()) {
-            try (InputStream in = new FileInputStream(f)) {
+        if (file.exists()) {
+            try (InputStream in = new FileInputStream(file)) {
                 p.load(in);
             } catch (IOException e) {
                 System.err.println("[ConfigManager] Failed to load config: " + e.getMessage());
@@ -240,7 +231,7 @@ public class ConfigManager {
     }
 
     private void saveProperties(Properties p) {
-        try (OutputStream out = new FileOutputStream(getFile())) {
+        try (OutputStream out = new FileOutputStream(file)) {
             p.store(out, "Backtrack config");
             cachedProperties = null;
         } catch (IOException e) {
