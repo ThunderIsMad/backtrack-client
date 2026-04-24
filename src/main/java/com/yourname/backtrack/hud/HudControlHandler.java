@@ -11,7 +11,6 @@ import org.lwjgl.input.Keyboard;
 
 public class HudControlHandler {
 
-    private final Minecraft mc = Minecraft.getMinecraft();
     private final HudSettings settings;
     private final ConfigManager configManager;
 
@@ -60,6 +59,10 @@ public class HudControlHandler {
         ClientRegistry.registerKeyBinding(spacingDownKey);
         ClientRegistry.registerKeyBinding(backgroundKey);
         ClientRegistry.registerKeyBinding(textModeKey);
+    }
+
+    private static Minecraft mc() {
+        return Minecraft.getMinecraft();
     }
 
     @SubscribeEvent
@@ -136,9 +139,8 @@ public class HudControlHandler {
     }
 
     private void notifyClient(String message) {
-        if (mc.player != null) {
-            mc.player.sendMessage(new TextComponentString(message));
+        if (mc().player != null) {
+            mc().player.sendMessage(new TextComponentString(message));
         }
     }
 }
-
