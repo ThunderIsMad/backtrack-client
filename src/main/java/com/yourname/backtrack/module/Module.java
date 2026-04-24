@@ -71,14 +71,12 @@ public abstract class Module {
         return keyCode;
     }
 
-    // Safe to call at any time including postInit/config loading:
-    // only touches our plain int field and KeyBinding.setKeyCode(),
-    // which is a Forge-added method and not subject to MCP obfuscation.
-    // gameSettings.setOptionKeyBinding() is intentionally NOT called here —
-    // that MCP method is only safe to call from live game events (KeybindHandler).
+    // Safe to call at any time including postInit/config loading.
+    // Sets our plain int field and directly assigns keyBinding.keyCode (public field in 1.12.2).
+    // KeyBinding.setKeyCode(int) does not exist in 1.12.2 — use the field directly.
     public void setKeyCode(int keyCode) {
         this.keyCode = keyCode;
-        keyBinding.setKeyCode(keyCode);
+        keyBinding.keyCode = keyCode;
         KeyBinding.resetKeyBindingArrayAndHash();
     }
 
