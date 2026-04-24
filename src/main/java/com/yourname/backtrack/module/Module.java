@@ -20,7 +20,7 @@ import java.util.function.Consumer;
 
 public abstract class Module {
 
-    // Never store as a field — must be called at runtime after Minecraft initialises.
+    // Must be called at runtime only — never at class-load or postInit time.
     protected static Minecraft mc() {
         return Minecraft.getMinecraft();
     }
@@ -36,7 +36,7 @@ public abstract class Module {
     private final List<Setting> settings = new ArrayList<>();
     private boolean enabled;
 
-    // Plain int — never goes through any obfuscated KeyBinding method at load time.
+    // Plain int field — never touches any obfuscated KeyBinding method at load time.
     private int keyCode;
 
     public Module(String name, Category category, int defaultKey) {
@@ -71,17 +71,15 @@ public abstract class Module {
         return keyCode;
     }
 
+    // Safe to call at any time including postInit/config loading:
+    // only touches our plain int field and KeyBinding.setKeyCode(),
+    // which is a Forge-added method and not subject to MCP obfuscation.
+    // gameSettings.setOptionKeyBinding() is intentionally NOT called here —
+    // that MCP method is only safe to call from live game events (KeybindHandler).
     public void setKeyCode(int keyCode) {
         this.keyCode = keyCode;
-        // gameSettings.setOptionKeyBinding is also an MCP name; only call it
-        // when Minecraft is fully initialised (i.e. from a live game event),
-        // never from postInit / config loading.
-        if (mc() != null && mc().gameSettings != null) {
-            mc().gameSettings.setOptionKeyBinding(keyBinding, keyCode);
-            KeyBinding.resetKeyBindingArrayAndHash();
-        } else {
-            keyBinding.setKeyCode(keyCode);
-        }
+        keyBinding.setKeyCode(keyCode);
+        KeyBinding.resetKeyBindingArrayAndHash();
     }
 
     public String getKeyName() {
