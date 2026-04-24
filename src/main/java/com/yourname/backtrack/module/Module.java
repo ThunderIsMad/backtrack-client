@@ -12,6 +12,7 @@ import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.util.text.TextComponentString;
 import org.lwjgl.input.Keyboard;
 
+import java.lang.reflect.Field;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -29,6 +30,27 @@ public abstract class Module {
             "White", "Red", "Green", "Blue", "Yellow", "Cyan", "Orange", "Pink", "Rainbow"
     );
 
+    /**
+     * Resolved once on first use. Tries the MCP deobf name "keyCode" first,
+     * then falls back to the SRG-obfuscated name "field_151462_b" used in the
+     * production jar. Both refer to the same private int field on KeyBinding.
+     */
+    private static Field keyBindingKeyCodeField;
+
+    private static Field resolveKeyCodeField() {
+        if (keyBindingKeyCodeField != null) return keyBindingKeyCodeField;
+        for (String name : new String[]{"keyCode", "field_151462_b"}) {
+            try {
+                Field f = KeyBinding.class.getDeclaredField(name);
+                f.setAccessible(true);
+                keyBindingKeyCodeField = f;
+                return f;
+            } catch (NoSuchFieldException ignored) {
+            }
+        }
+        throw new RuntimeException("[Backtrack] Could not find KeyBinding keyCode field");
+    }
+
     private final String name;
     private final Category category;
     private final KeyBinding keyBinding;
@@ -36,7 +58,7 @@ public abstract class Module {
     private final List<Setting> settings = new ArrayList<>();
     private boolean enabled;
 
-    // Plain int field — never touches any obfuscated KeyBinding method at load time.
+    // Plain int field — our own shadow of the keybind code.
     private int keyCode;
 
     public Module(String name, Category category, int defaultKey) {
@@ -71,12 +93,16 @@ public abstract class Module {
         return keyCode;
     }
 
-    // Safe to call at any time including postInit/config loading.
-    // Sets our plain int field and directly assigns keyBinding.keyCode (public field in 1.12.2).
-    // KeyBinding.setKeyCode(int) does not exist in 1.12.2 — use the field directly.
+    // Uses reflection to write the private keyCode field on KeyBinding.
+    // Works in both deobf (dev, field name "keyCode") and obf (production,
+    // field name "field_151462_b") environments.
     public void setKeyCode(int keyCode) {
         this.keyCode = keyCode;
-        keyBinding.keyCode = keyCode;
+        try {
+            resolveKeyCodeField().setInt(keyBinding, keyCode);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException("[Backtrack] Failed to set KeyBinding keyCode", e);
+        }
         KeyBinding.resetKeyBindingArrayAndHash();
     }
 
