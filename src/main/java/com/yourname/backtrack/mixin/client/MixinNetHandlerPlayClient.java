@@ -28,9 +28,8 @@ public class MixinNetHandlerPlayClient {
     /**
      * Intercept SPacketEntityVelocity before vanilla applies it.
      *
-     * Responsibilities:
-     *  1. Notify JumpResetModule of fall-damage detection (vx=0, vz=0, vy<0).
-     *  2. Let VelocityModule modify or cancel the packet for Basic/Intave/Spoof modes.
+     * 1. Notify JumpResetModule (fall-damage / knockback detection).
+     * 2. Let VelocityModule modify or cancel the packet.
      *
      * MCP 1.12.2: getter is getEntityID() (capital ID).
      */
@@ -43,7 +42,7 @@ public class MixinNetHandlerPlayClient {
         SoloBacktrack mod = SoloBacktrack.getInstance();
         if (mod == null) return;
 
-        // --- JumpReset fall damage detection ---
+        // Notify JumpResetModule of the incoming velocity packet.
         JumpResetModule jr = mod.getModuleManager().getModule(JumpResetModule.class);
         if (jr != null) {
             double vx = packet.getMotionX() / 8000.0;
@@ -52,15 +51,13 @@ public class MixinNetHandlerPlayClient {
             jr.notifyVelocityPacket(vx, vy, vz);
         }
 
-        // --- VelocityModule packet handling ---
+        // Let VelocityModule modify or cancel the packet.
         VelocityModule vm = mod.getModuleManager().getModule(VelocityModule.class);
         if (vm == null) return;
 
-        // Cast to accessor so VelocityModule can read/write the private int fields
         VelocityModule.SPacketEntityVelocityAccessor accessor =
                 (VelocityModule.SPacketEntityVelocityAccessor)(Object) packet;
 
-        boolean cancel = vm.handleVelocityPacket(accessor);
-        if (cancel) ci.cancel();
+        if (vm.handleVelocityPacket(accessor)) ci.cancel();
     }
 }
