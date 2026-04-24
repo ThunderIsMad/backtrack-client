@@ -12,7 +12,6 @@ import org.lwjgl.input.Keyboard;
 
 public class GuiOpener {
 
-    private final Minecraft mc = Minecraft.getMinecraft();
     private final ModuleManager moduleManager;
     private final ConfigManager configManager;
     private final HudSettings hudSettings;
@@ -29,11 +28,14 @@ public class GuiOpener {
         ClientRegistry.registerKeyBinding(openGuiKey);
     }
 
+    private static Minecraft mc() {
+        return Minecraft.getMinecraft();
+    }
+
     @SubscribeEvent
     public void onKeyInput(InputEvent.KeyInputEvent event) {
         if (openGuiKey.isPressed()) {
-            mc.displayGuiScreen(new ClickGuiScreen(moduleManager, configManager, hudSettings, guiTheme));
+            mc().displayGuiScreen(new ClickGuiScreen(moduleManager, configManager, hudSettings, guiTheme));
         }
     }
 }
-

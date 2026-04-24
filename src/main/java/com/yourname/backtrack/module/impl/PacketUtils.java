@@ -5,14 +5,16 @@ import net.minecraft.network.INetHandler;
 import net.minecraft.network.Packet;
 
 public class PacketUtils {
-    private static final Minecraft mc = Minecraft.getMinecraft();
+
+    private static Minecraft mc() {
+        return Minecraft.getMinecraft();
+    }
 
     @SuppressWarnings("unchecked")
     public static void receivePacket(Packet<?> packet) {
-        if (mc.getConnection() == null) return;
+        if (mc().getConnection() == null) return;
         try {
-            ((Packet<INetHandler>) packet).processPacket(mc.getConnection());
+            ((Packet<INetHandler>) packet).processPacket(mc().getConnection());
         } catch (Exception ignored) {}
     }
 }
-
