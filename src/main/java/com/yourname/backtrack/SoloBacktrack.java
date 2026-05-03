@@ -6,6 +6,7 @@ import com.yourname.backtrack.gui.GuiTheme;
 import com.yourname.backtrack.hud.HudControlHandler;
 import com.yourname.backtrack.hud.HudRenderer;
 import com.yourname.backtrack.hud.HudSettings;
+import com.yourname.backtrack.util.IntaveChatLogger;
 import com.yourname.backtrack.input.KeybindHandler;
 import com.yourname.backtrack.module.ModuleManager;
 import net.minecraftforge.common.MinecraftForge;
@@ -61,5 +62,6 @@ public class SoloBacktrack {
         MinecraftForge.EVENT_BUS.register(new HudRenderer(moduleManager, hudSettings));
         MinecraftForge.EVENT_BUS.register(new HudControlHandler(hudSettings, configManager));
         MinecraftForge.EVENT_BUS.register(new GuiOpener(moduleManager, configManager, hudSettings, guiTheme));
+        MinecraftForge.EVENT_BUS.register(new IntaveChatLogger());
     }
 }

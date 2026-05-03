@@ -248,4 +248,12 @@ public abstract class Module {
                 createResetHudPositionSetting()
         );
     }
+
+    /**
+     * Returns the list of settings that should currently be displayed in the GUI.
+     * Override in subclasses to filter settings based on mode, etc.
+     */
+    public List<Setting> getVisibleSettings() {
+        return getSettings();
+    }
 }

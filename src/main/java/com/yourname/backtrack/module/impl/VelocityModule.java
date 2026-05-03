@@ -2,304 +2,387 @@ package com.yourname.backtrack.module.impl;
 
 import com.yourname.backtrack.module.Category;
 import com.yourname.backtrack.module.Module;
+import com.yourname.backtrack.setting.Setting;
 import com.yourname.backtrack.setting.BooleanSetting;
 import com.yourname.backtrack.setting.ModeSetting;
 import com.yourname.backtrack.setting.NumberSetting;
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.play.client.CPacketPlayer;
+import net.minecraft.client.settings.KeyBinding;
+import net.minecraft.entity.EntityLivingBase;
+import net.minecraft.network.play.server.SPacketExplosion;
+import net.minecraft.util.math.RayTraceResult;
 import net.minecraftforge.client.event.InputUpdateEvent;
 import org.lwjgl.input.Keyboard;
+import org.lwjgl.input.Mouse;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
+import java.util.Random;
 
-/**
- * Velocity — Augustus-logic adapted for backtrack-client / Forge 1.12.2.
- *
- * Modes: Basic, Legit, PushGround, Push, IntvAC, Reverse, Spoof
- *
- * Packet handling (Basic / Legit / IntvAC / Spoof) → MixinNetHandlerPlayClient
- *   via handleVelocityPacket().
- * Per-tick motion logic (IntvAC jump, Push, Reverse, PushGround, Spoof send)
- *   → onInputUpdate(), which fires right before the outgoing position packet.
- *
- * Augustus EventReadPacket  → handleVelocityPacket()
- * Augustus EventSilentMove  → onInputUpdate()
- * Augustus EventUpdate      → onInputUpdate()
- * Augustus moveFlying()     → manual yaw impulse (moveFlying absent in 1.12.2 MCP)
- */
 public class VelocityModule extends Module {
 
-    // ── Mode ──────────────────────────────────────────────────────────────────
+    public interface SPacketEntityVelocityAccessor {
+        int getMotionX();
+        int getMotionY();
+        int getMotionZ();
+        void setMotionX(int v);
+        void setMotionY(int v);
+        void setMotionZ(int v);
+    }
+
+    public interface SPacketExplosionAccessor {
+        float getMotionX();
+        float getMotionY();
+        float getMotionZ();
+        void setMotionX(float v);
+        void setMotionY(float v);
+        void setMotionZ(float v);
+    }
 
     private final ModeSetting mode = new ModeSetting("Mode",
-            Arrays.asList("Basic", "Legit", "PushGround", "Push", "IntvAC", "Reverse", "Spoof"),
-            "Basic");
+            Arrays.asList("Modify", "JumpReset", "Reverse", "Push", "Legit", "TickZero"), "JumpReset");
 
-    // ── Basic / Legit ─────────────────────────────────────────────────────────
+    private final NumberSetting xzModify = new NumberSetting("XZ", 0, 0, 100, 1);
+    private final NumberSetting yModify  = new NumberSetting("Y",  0, 0, 100, 1);
+    private final BooleanSetting ignoreExplosion = new BooleanSetting("IgnoreExplosion", true);
 
-    /** XZ scale 0–100 %; 0 = cancel packet entirely. */
-    private final NumberSetting xzVelocity = new NumberSetting("XZVelocity", 20.0, 0.0, 100.0, 1.0);
-    /** Y scale 0–100 %; only applied in Basic. */
-    private final NumberSetting yVelocity  = new NumberSetting("YVelocity",  20.0, 0.0, 100.0, 1.0);
+    private final BooleanSetting fallDamageCheck = new BooleanSetting("FallDamageCheck", true);
+    private final BooleanSetting debug          = new BooleanSetting("Debug", false);
+    private final NumberSetting  chance         = new NumberSetting("Chance",      80,  1,   100, 1);
+    private final NumberSetting  resetTicks     = new NumberSetting("ResetTicks",  3,   1,   8,   1);
+    private final NumberSetting  cooldownTicks  = new NumberSetting("Cooldown",    14,  8,   25,  1);
+    private final BooleanSetting randomize      = new BooleanSetting("Randomize", false);
+    private final NumberSetting  delayMin       = new NumberSetting("DelayMin",    0,   0,   10,  1);
+    private final NumberSetting  delayMax       = new NumberSetting("DelayMax",    3,   0,   10,  1);
+    private final NumberSetting  maxDistance    = new NumberSetting("MaxDistance",  2.5, 1.0, 6.0, 0.1);
 
-    // ── IntvAC (Intave KnockbackCheck bypass) ────────────────────────────────
-
-    /** XZ packet scale −100–100 %. Negative = reverse. */
-    private final NumberSetting  xzScaleIntvAC = new NumberSetting("IntvACXZScale", 60.0, -100.0, 100.0, 1.0);
-    /** Every other KB hit: jump on hurtTime == 9 to satisfy hadYVelocityStartMotion. */
-    private final BooleanSetting jumpIntvAC    = new BooleanSetting("IntvACJump", false);
-
-    // ── Push ──────────────────────────────────────────────────────────────────
-
-    /** Forward impulse per tick = pushXZ * 0.01. */
-    private final NumberSetting  pushXZ       = new NumberSetting("PushSpeed",  11.0,  1.0, 200.0, 1.0);
-    private final NumberSetting  pushStart    = new NumberSetting("PushStart",   9.0,  1.0,  10.0, 1.0);
-    private final NumberSetting  pushEnd      = new NumberSetting("PushEnd",     2.0,  1.0,  10.0, 1.0);
-    private final BooleanSetting pushOnGround = new BooleanSetting("PushOnGround", false);
-
-    // ── Reverse ───────────────────────────────────────────────────────────────
-
-    private final NumberSetting  reverseStart  = new NumberSetting("ReverseStart",  9.0, 1.0, 10.0, 1.0);
+    private final NumberSetting reverseStart = new NumberSetting("ReverseStart", 9, 1, 10, 0);
     private final BooleanSetting reverseStrafe = new BooleanSetting("ReverseStrafe", false);
 
-    // ── ReduceOnAttack (LiquidBounce VelocityIntvAC) ─────────────────────────
+    private final NumberSetting pushXZ      = new NumberSetting("Push",      1.1, 0.01, 20.0, 2);
+    private final NumberSetting pushStart   = new NumberSetting("PushStart", 9.0, 1.0,  10.0, 0);
+    private final NumberSetting pushEnd     = new NumberSetting("PushEnd",   2.0, 1.0,  10.0, 0);
+    private final BooleanSetting pushOnGround = new BooleanSetting("PushOnGround", false);
 
-    private final BooleanSetting reduceOnAttack = new BooleanSetting("ReduceOnAttack", true);
-    /** XZ multiplier when ReduceOnAttack fires (0–100 %). */
-    private final NumberSetting  reduceFactor   = new NumberSetting("ReduceFactor",   60.0,   0.0, 100.0,   5.0);
-    private final NumberSetting  hurtTimeMin    = new NumberSetting("HurtTimeMin",     5.0,   1.0,  10.0,   1.0);
-    private final NumberSetting  hurtTimeMax    = new NumberSetting("HurtTimeMax",     7.0,   1.0,  10.0,   1.0);
-    private final NumberSetting  attackWindowMs = new NumberSetting("AttackWindowMs", 2000.0, 100.0, 5000.0, 100.0);
+    private final BooleanSetting legitStrafe = new BooleanSetting("LegitStrafe", true);
 
-    // ── State ─────────────────────────────────────────────────────────────────
+    private final NumberSetting tickZeroHurtTime = new NumberSetting("TickZeroHurtTime", 4, 1, 10, 0);
 
-    /** IntvAC: fire jump on every other hit (counter % 2 == 0). */
-    private int     intvACCounter    = 0;
-    /** Spoof: true for one tick after cancelling the velocity packet. */
-    private boolean spoofPending     = false;
-    private double  spoofX, spoofY, spoofZ;
-    private long    lastAttackTimeMs = 0L;
-
-    // ─────────────────────────────────────────────────────────────────────────
+    private final Random random = new Random();
+    private double  prevMotionY    = 0.0;
+    private int     ticksSinceHit  = 0;
+    private boolean wasHurt        = false;
+    private int     cooldownTimer  = 0;
+    private boolean isFallDamage   = false;
+    private int     currentDelay   = 0;
+    private int     delayCounter   = 0;
+    private boolean pendingJump    = false;
+    private boolean jumpKeyHeld    = false;
 
     public VelocityModule() {
         super("Velocity", Category.COMBAT, Keyboard.KEY_NONE);
-        addSetting(mode);
-        addSetting(xzVelocity);
-        addSetting(yVelocity);
-        addSetting(xzScaleIntvAC);
-        addSetting(jumpIntvAC);
-        addSetting(pushXZ);
-        addSetting(pushStart);
-        addSetting(pushEnd);
-        addSetting(pushOnGround);
-        addSetting(reverseStart);
-        addSetting(reverseStrafe);
-        addSetting(reduceOnAttack);
-        addSetting(reduceFactor);
-        addSetting(hurtTimeMin);
-        addSetting(hurtTimeMax);
-        addSetting(attackWindowMs);
-        addHudSettings();
+        addSettings(new Setting[] { mode,
+                xzModify, yModify, ignoreExplosion,
+                fallDamageCheck, debug, chance, resetTicks, cooldownTicks,
+                randomize, delayMin, delayMax, maxDistance,
+                reverseStart, reverseStrafe,
+                pushXZ, pushStart, pushEnd, pushOnGround,
+                legitStrafe,
+                tickZeroHurtTime });
+    }
+
+    public boolean handleVelocityPacket(SPacketEntityVelocityAccessor pkt) {
+        if (mc().player == null) return false;
+
+        int rawX = pkt.getMotionX();
+        int rawY = pkt.getMotionY();
+        int rawZ = pkt.getMotionZ();
+
+        double vx = rawX / 8000.0;
+        double vy = rawY / 8000.0;
+        double vz = rawZ / 8000.0;
+
+        isFallDamage = (rawX == 0 && rawZ == 0 && rawY < 0);
+
+        if (debug.getValue()) {
+            sendClientMessage("\u00a7eVel vx=" + String.format("%.3f", vx) +
+                    " vy=" + String.format("%.3f", vy) +
+                    " vz=" + String.format("%.3f", vz) +
+                    " fall=" + isFallDamage);
+        }
+
+        String sel = mode.getValue();
+        if ("Modify".equals(sel)) {
+            double xzFactor = xzModify.getValue() / 100.0;
+            double yFactor  = yModify.getValue()  / 100.0;
+            if (xzFactor <= 0.0 && yFactor <= 0.0) {
+                pkt.setMotionX(0);
+                pkt.setMotionY(0);
+                pkt.setMotionZ(0);
+                return true;
+            } else {
+                pkt.setMotionX((int) (rawX * xzFactor));
+                pkt.setMotionY((int) (rawY * yFactor));
+                pkt.setMotionZ((int) (rawZ * xzFactor));
+            }
+        }
+
+        return false;
+    }
+
+    public void notifyVelocityPacket(double vx, double vy, double vz) {
+        isFallDamage = (vx == 0.0 && vz == 0.0 && vy < 0);
+        if (debug.getValue()) {
+            sendClientMessage("\u00a7eNotifyVel vx=" + String.format("%.3f", vx) +
+                    " vy=" + String.format("%.3f", vy) +
+                    " vz=" + String.format("%.3f", vz) +
+                    " fallDmg=" + isFallDamage);
+        }
+    }
+
+    public void handleExplosion(SPacketExplosion packet) {
+        if (!"Modify".equals(mode.getValue()) || !ignoreExplosion.getValue()) return;
+        SPacketExplosionAccessor pkt = (SPacketExplosionAccessor) packet;
+        double xzFactor = xzModify.getValue() / 100.0;
+        double yFactor  = yModify.getValue()  / 100.0;
+        pkt.setMotionX((float)(pkt.getMotionX() * xzFactor));
+        pkt.setMotionY((float)(pkt.getMotionY() * yFactor));
+        pkt.setMotionZ((float)(pkt.getMotionZ() * xzFactor));
+    }
+
+    @Override
+    public void onInputUpdate(InputUpdateEvent event) {
+        if (!isEnabled() || mc().player == null || mc().world == null) return;
+
+        String sel = mode.getValue();
+
+        if (cooldownTimer > 0) {
+            cooldownTimer--;
+            releaseJumpKey();
+        }
+
+        boolean isHurt = mc().player.hurtTime > 0;
+        if (isHurt && !wasHurt) ticksSinceHit = 0;
+        if (isHurt) ticksSinceHit++; else ticksSinceHit = 0;
+        wasHurt = isHurt;
+
+        boolean justLanded = prevMotionY < -0.01 && mc().player.onGround;
+        prevMotionY = mc().player.motionY;
+
+        switch (sel) {
+            case "JumpReset":
+                handleJumpReset(justLanded);
+                break;
+            case "Reverse":
+                handleReverse();
+                break;
+            case "Push":
+                handlePush();
+                break;
+            case "Legit":
+                handleLegit();
+                break;
+            case "TickZero":
+                handleTickZero();
+                break;
+        }
+    }
+
+    private void handleJumpReset(boolean justLanded) {
+        if (pendingJump && mc().player.onGround && isTargetingEnemyInComboRange()) {
+            if (randomize.getValue()) {
+                delayCounter++;
+                if (delayCounter >= currentDelay) {
+                    pressJumpKey();
+                    pendingJump = false;
+                    delayCounter = 0;
+                }
+            } else {
+                pressJumpKey();
+                pendingJump = false;
+            }
+            return;
+        }
+
+        if (cooldownTimer > 0) return;
+        if (!mc().player.onGround) return;
+        if (!justLanded) return;
+        if (fallDamageCheck.getValue() && isFallDamage) return;
+        if (ticksSinceHit < 1 || ticksSinceHit > (int) resetTicks.getValue()) return;
+        if (!isTargetingEnemyInComboRange()) return;
+        if (random.nextDouble() * 100 >= chance.getValue()) return;
+
+        if (randomize.getValue()) {
+            int lo = (int) delayMin.getValue();
+            int hi = (int) Math.max(lo, delayMax.getValue());
+            currentDelay = (hi > lo) ? lo + random.nextInt(hi - lo + 1) : lo;
+            delayCounter = 0;
+            if (currentDelay == 0) {
+                pressJumpKey();
+            } else {
+                pendingJump = true;
+            }
+        } else {
+            pressJumpKey();
+        }
+    }
+
+    private void pressJumpKey() {
+        if (mc().player == null) return;
+        KeyBinding.setKeyBindState(mc().gameSettings.keyBindJump.getKeyCode(), true);
+        jumpKeyHeld = true;
+        cooldownTimer = (int) cooldownTicks.getValue();
+
+        if (debug.getValue()) {
+            sendClientMessage("\u00a7aJR \u00a77tick=" + ticksSinceHit +
+                    " hurt=" + mc().player.hurtTime +
+                    " input=SPACE emulated");
+        }
+    }
+
+    private void releaseJumpKey() {
+        if (jumpKeyHeld) {
+            KeyBinding.setKeyBindState(mc().gameSettings.keyBindJump.getKeyCode(), false);
+            jumpKeyHeld = false;
+        }
+    }
+
+    private boolean isTargetingEnemyInComboRange() {
+        if (mc().player == null || mc().world == null) return false;
+
+        EntityLivingBase lastAttacked = mc().player.getLastAttackedEntity();
+        if (lastAttacked == null || lastAttacked.isDead) return false;
+
+        if (mc().objectMouseOver == null) return false;
+        if (mc().objectMouseOver.typeOfHit != RayTraceResult.Type.ENTITY) return false;
+        if (!mc().objectMouseOver.entityHit.equals(lastAttacked)) return false;
+
+        double dist = mc().player.getDistance(lastAttacked);
+        if (dist > maxDistance.getValue()) return false;
+
+        double dx = lastAttacked.posX - mc().player.posX;
+        double dz = lastAttacked.posZ - mc().player.posZ;
+        double angleToAttacker = Math.toDegrees(Math.atan2(dz, dx)) - mc().player.rotationYaw;
+        angleToAttacker = (angleToAttacker % 360 + 540) % 360 - 180;
+        if (Math.abs(angleToAttacker) > 90.0) return false;
+
+        return Mouse.isButtonDown(0);
+    }
+
+    private void handleReverse() {
+        if (mc().player.hurtTime == (int) reverseStart.getValue()) {
+            mc().player.motionX *= -1.0;
+            mc().player.motionZ *= -1.0;
+            if (reverseStrafe.getValue()) {
+                mc().player.motionX *= 0.2;
+                mc().player.motionZ *= 0.2;
+                float yaw = mc().player.rotationYaw;
+                mc().player.motionX -= Math.sin(yaw * Math.PI / 180.0) * 0.2;
+                mc().player.motionZ += Math.cos(yaw * Math.PI / 180.0) * 0.2;
+            }
+        }
+    }
+
+    private void handlePush() {
+        int start = (int) pushStart.getValue();
+        int end   = (int) pushEnd.getValue();
+        if (mc().player.hurtTime >= Math.min(start, end) &&
+                mc().player.hurtTime <= Math.max(start, end)) {
+            float factor = (float)(pushXZ.getValue() / 100.0);
+            mc().player.moveRelative(0.0f, 0.0f, factor, 0.98f);
+            if (pushOnGround.getValue()) {
+                mc().player.onGround = true;
+            }
+        }
+    }
+
+    private void handleLegit() {
+        if (mc().player.hurtTime <= 0) return;
+        if (!legitStrafe.getValue()) return;
+        mc().player.motionX *= 0.6;
+        mc().player.motionZ *= 0.6;
+    }
+
+    private void handleTickZero() {
+        if (mc().player.hurtTime == (int) tickZeroHurtTime.getValue()) {
+            mc().player.motionX *= 0.0;
+            mc().player.motionZ *= 0.0;
+        }
+    }
+
+    public void onAttack() {
+        if (mc().player == null || mc().player.getLastAttackedEntity() == null) return;
+        if (mc().player.getLastAttackedEntity().hurtTime > 0 && mc().player.hurtTime > 0) {
+            mc().player.motionX *= 0.6;
+            mc().player.motionZ *= 0.6;
+            if (debug.getValue()) {
+                sendClientMessage("\u00a7dReduceOnAttack \u00a77motionX=" + String.format("%.3f", mc().player.motionX) +
+                        " motionZ=" + String.format("%.3f", mc().player.motionZ));
+            }
+        }
+    }
+
+    @Override
+    public List<Setting> getVisibleSettings() {
+        List<Setting> filtered = new ArrayList<>();
+        filtered.add(mode);
+        String currentMode = mode.getValue();
+        switch (currentMode) {
+            case "Modify":
+                filtered.add(xzModify);
+                filtered.add(yModify);
+                filtered.add(ignoreExplosion);
+                break;
+            case "JumpReset":
+                filtered.add(fallDamageCheck);
+                filtered.add(debug);
+                filtered.add(chance);
+                filtered.add(resetTicks);
+                filtered.add(cooldownTicks);
+                filtered.add(randomize);
+                filtered.add(delayMin);
+                filtered.add(delayMax);
+                filtered.add(maxDistance);
+                break;
+            case "Reverse":
+                filtered.add(reverseStart);
+                filtered.add(reverseStrafe);
+                break;
+            case "Push":
+                filtered.add(pushXZ);
+                filtered.add(pushStart);
+                filtered.add(pushEnd);
+                filtered.add(pushOnGround);
+                break;
+            case "Legit":
+                filtered.add(legitStrafe);
+                break;
+            case "TickZero":
+                filtered.add(tickZeroHurtTime);
+                break;
+        }
+        return filtered;
+    }
+
+    @Override
+    public void onEnable() {
+        resetState();
     }
 
     @Override
     public void onDisable() {
-        intvACCounter = 0;
-        spoofPending  = false;
+        releaseJumpKey();
+        resetState();
     }
 
-    // =========================================================================
-    // Packet layer — called by MixinNetHandlerPlayClient.onHandleEntityVelocity
-    // Returns true  → cancel the packet (velocity not applied by vanilla).
-    // Returns false → let the (possibly modified) packet through.
-    // =========================================================================
-
-    public boolean handleVelocityPacket(SPacketEntityVelocityAccessor packet) {
-        if (!isEnabled() || Minecraft.getMinecraft().player == null) return false;
-
-        switch (mode.getValue()) {
-
-            case "Basic": {
-                double xz = xzVelocity.getValue();
-                double y  = yVelocity.getValue();
-                if (xz <= 0.0 && y <= 0.0) return true; // full cancel
-                packet.setMotionX((int)(packet.getMotionX() * xz / 100.0));
-                packet.setMotionY((int)(packet.getMotionY() * y  / 100.0));
-                packet.setMotionZ((int)(packet.getMotionZ() * xz / 100.0));
-                return false;
-            }
-
-            case "Legit": {
-                // Subtle reduce — XZ only, Y untouched so it looks natural.
-                double xz = xzVelocity.getValue();
-                if (xz <= 0.0) return true;
-                packet.setMotionX((int)(packet.getMotionX() * xz / 100.0));
-                packet.setMotionZ((int)(packet.getMotionZ() * xz / 100.0));
-                return false;
-            }
-
-            case "IntvAC": {
-                // Scale XZ; may be negative to partially reverse the knockback vector.
-                // Satisfies Intave bad5 (xz_increasement) by keeping a non-zero value.
-                double scale = xzScaleIntvAC.getValue() / 100.0;
-                packet.setMotionX((int)(packet.getMotionX() * scale));
-                packet.setMotionZ((int)(packet.getMotionZ() * scale));
-                return false;
-            }
-
-            case "Spoof": {
-                // Augustus Spoof: cancel the real packet, then on the next tick send
-                // a fake position offset equal to the velocity delta, so the server
-                // thinks we moved but our client ignores the knockback.
-                spoofX = packet.getMotionX() / 8000.0;
-                spoofY = packet.getMotionY() / 8000.0;
-                spoofZ = packet.getMotionZ() / 8000.0;
-                spoofPending = true;
-                return true;
-            }
-
-            default:
-                return false;
-        }
-    }
-
-    // =========================================================================
-    // Tick layer — fires before the outgoing C03 position packet.
-    // Covers: Spoof deferred send, IntvAC jump, PushGround, Push, Reverse.
-    // =========================================================================
-
-    @Override
-    public void onInputUpdate(InputUpdateEvent event) {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (!isEnabled() || mc.player == null || mc.world == null) return;
-
-        // Spoof: send the fake position offset one tick after cancelling the packet.
-        if (spoofPending) {
-            mc.player.connection.sendPacket(new CPacketPlayer.Position(
-                    mc.player.posX + spoofX,
-                    mc.player.posY + spoofY,
-                    mc.player.posZ + spoofZ,
-                    false
-            ));
-            spoofPending = false;
-        }
-
-        switch (mode.getValue()) {
-            case "IntvAC":     handleIntvAC(mc);     break;
-            case "PushGround": handlePushGround(mc); break;
-            case "Push":       handlePush(mc);       break;
-            case "Reverse":    handleReverse(mc);    break;
-        }
-    }
-
-    // ── Per-mode tick handlers ────────────────────────────────────────────────
-
-    /**
-     * Augustus IntvAC case in onEventSilentMove:
-     *   if (jump && hurtTime == 9 && onGround && counter++ % 2 == 0) jump = true
-     *
-     * Setting motionY = 0.42 replicates vanilla jump force, satisfying Intave's
-     * hadYVelocityStartMotion check (requires velocitySqY >= 0.09; 0.42² = 0.176).
-     * Firing only every other hit avoids velocityVL2 accumulation.
-     */
-    private void handleIntvAC(Minecraft mc) {
-        if (!jumpIntvAC.getValue()) return;
-        if (mc.player.hurtTime == 9 && mc.player.onGround && intvACCounter++ % 2 == 0) {
-            mc.player.motionY    = 0.42;
-            mc.player.isAirBorne = true;
-        }
-    }
-
-    /**
-     * Augustus pushGround(): forces onGround = true while hurt so the server
-     * treats the player as grounded, bypassing air-velocity checks.
-     */
-    private void handlePushGround(Minecraft mc) {
-        if (mc.player.hurtTime > 0) {
-            mc.player.onGround = true;
-        }
-    }
-
-    /**
-     * Augustus push(): apply a forward yaw-direction impulse during the hurtTime
-     * window. moveFlying() doesn't exist in 1.12.2 MCP; yaw-based trig is equivalent.
-     */
-    private void handlePush(Minecraft mc) {
-        int ht = mc.player.hurtTime;
-        int lo = (int) Math.min(pushStart.getValue(), pushEnd.getValue());
-        int hi = (int) Math.max(pushStart.getValue(), pushEnd.getValue());
-        if (ht >= lo && ht <= hi) {
-            double rad = Math.toRadians(mc.player.rotationYaw);
-            double spd = pushXZ.getValue() * 0.01;
-            mc.player.motionX += -Math.sin(rad) * spd;
-            mc.player.motionZ +=  Math.cos(rad) * spd;
-            if (pushOnGround.getValue()) {
-                mc.player.onGround = true;
-            }
-        }
-    }
-
-    /**
-     * Augustus reverse(): invert XZ velocity on the trigger tick, then optionally
-     * strafe perpendicular to facing for the remainder of the hurtTime window.
-     */
-    private void handleReverse(Minecraft mc) {
-        int ht = mc.player.hurtTime;
-        if (ht == (int) reverseStart.getValue()) {
-            mc.player.motionX *= -1.0;
-            mc.player.motionZ *= -1.0;
-        }
-        if (reverseStrafe.getValue() && ht > 0 && ht <= (int) reverseStart.getValue()) {
-            strafe(mc);
-        }
-    }
-
-    // =========================================================================
-    // ReduceOnAttack — called by MixinPlayerControllerMP.onAttackEntity
-    // Adapted from LiquidBounce VelocityIntvAC ReduceOnAttack.
-    // Multiplies XZ velocity when we attack while the target is in hurtTime window.
-    // =========================================================================
-
-    public void onAttack() {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (!isEnabled() || mc.player == null) return;
-        if (!reduceOnAttack.getValue()) return;
-
-        long now = System.currentTimeMillis();
-        int  ht  = mc.player.hurtTime;
-        int  lo  = (int) hurtTimeMin.getValue();
-        int  hi  = (int) hurtTimeMax.getValue();
-
-        if (ht >= lo && ht <= hi && (now - lastAttackTimeMs) <= (long) attackWindowMs.getValue()) {
-            double f = reduceFactor.getValue() / 100.0;
-            mc.player.motionX *= f;
-            mc.player.motionZ *= f;
-        }
-        lastAttackTimeMs = now;
-    }
-
-    // ── Utility ───────────────────────────────────────────────────────────────
-
-    /** Augustus MoveUtil.strafe(): redirect XZ at 90° to current facing, same speed. */
-    private void strafe(Minecraft mc) {
-        double yaw = Math.toRadians(mc.player.rotationYaw + 90.0);
-        double spd = Math.sqrt(mc.player.motionX * mc.player.motionX
-                             + mc.player.motionZ * mc.player.motionZ);
-        mc.player.motionX = Math.cos(yaw) * spd;
-        mc.player.motionZ = Math.sin(yaw) * spd;
-    }
-
-    // =========================================================================
-    // Accessor interface — implemented by MixinSPacketEntityVelocity via @Accessor
-    // =========================================================================
-
-    public interface SPacketEntityVelocityAccessor {
-        int  getMotionX();
-        int  getMotionY();
-        int  getMotionZ();
-        void setMotionX(int v);
-        void setMotionY(int v);
-        void setMotionZ(int v);
+    private void resetState() {
+        prevMotionY   = 0.0;
+        ticksSinceHit = 0;
+        wasHurt       = false;
+        cooldownTimer = 0;
+        isFallDamage  = false;
+        pendingJump   = false;
+        delayCounter  = 0;
+        currentDelay  = 0;
     }
 }

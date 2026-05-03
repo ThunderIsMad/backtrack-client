@@ -13,7 +13,7 @@
     </facet>
   </component>
   <component name="McpModuleSettings">
-    <option name="mappingFile" value="C:\Users\botbo.FSOS-MF560LQAAU\.gradle\caches\minecraft\de\oceanlabs\mcp\mcp_snapshot\20171003\1.12.2\srgs\mcp-srg.srg" />
+    <option name="mappingFile" value="C:\Backtrack\.gradle\caches\minecraft\de\oceanlabs\mcp\mcp_snapshot\20171003\1.12.2\srgs\mcp-srg.srg" />
     <option name="mcpVersion" value="snapshot_20171003" />
     <option name="minecraftVersion" value="1.12.2" />
     <option name="srgType" value="SRG" />

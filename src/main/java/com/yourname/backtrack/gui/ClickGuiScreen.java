@@ -253,7 +253,7 @@ public class ClickGuiScreen extends GuiScreen {
         Gui.drawRect(sx, sliderY, sx + fillW,     sliderY + 4, COLOR_ACCENT);
 
         // Value text right-aligned in the reserved area
-        String valStr = String.format(Locale.US, "%.1f", ns.getValue());
+        String valStr = String.format(Locale.US, "%.2f", ns.getValue());
         int rw = fontRenderer.getStringWidth(valStr);
         fontRenderer.drawStringWithShadow(valStr, x + PANEL_W - SLIDER_RIGHT_PAD - rw, y + 2, COLOR_TEXT);
     }
@@ -440,7 +440,7 @@ public class ClickGuiScreen extends GuiScreen {
 
     private List<Setting> getMainSettings(Module mod) {
         List<Setting> result = new ArrayList<>();
-        for (Setting s : mod.getSettings()) {
+        for (Setting s : mod.getVisibleSettings()) {
             if (s.getGroup() != SettingGroup.HUDTEXT
                     && s.getGroup() != SettingGroup.DEBUG_WINDOW)
                 result.add(s);
@@ -492,7 +492,7 @@ public class ClickGuiScreen extends GuiScreen {
 
     private String getSettingValueText(Setting s) {
         if (s instanceof BooleanSetting) return ((BooleanSetting) s).getValue() ? "ON" : "OFF";
-        if (s instanceof NumberSetting)  return String.format(Locale.US, "%.1f", ((NumberSetting) s).getValue());
+        if (s instanceof NumberSetting)  return String.format(Locale.US, "%.2f", ((NumberSetting) s).getValue());
         if (s instanceof ModeSetting)    return ((ModeSetting) s).getValue();
         if (s instanceof ActionSetting)  return ">";
         return "";

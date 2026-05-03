@@ -6,6 +6,7 @@ import com.yourname.backtrack.module.ModuleManager;
 import net.minecraftforge.client.event.InputUpdateEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
+import org.lwjgl.input.Keyboard;
 
 public class KeybindHandler {
 
@@ -19,10 +20,15 @@ public class KeybindHandler {
 
     @SubscribeEvent
     public void onKeyInput(InputEvent.KeyInputEvent event) {
+        if (!Keyboard.getEventKeyState()) {
+            return;
+        }
+        int pressedKey = Keyboard.getEventKey() == 0 ? Keyboard.getEventCharacter() + 256 : Keyboard.getEventKey();
         for (Module module : moduleManager.getModules()) {
-            if (module.getKeyBinding().isPressed()) {
+            if (module.getKeyCode() == pressedKey) {
                 module.toggle();
                 configManager.saveModuleStates(moduleManager);
+                break;
             }
         }
     }
@@ -36,4 +42,3 @@ public class KeybindHandler {
         }
     }
 }
-

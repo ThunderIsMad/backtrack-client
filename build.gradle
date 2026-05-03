@@ -42,6 +42,7 @@ minecraft {
     runDir = "run"
     mappings = "snapshot_20171003"
     makeObfSourceJar = false
+    clientRunArgs += ['--username', 'eblannn']
 }
 
 repositories {
