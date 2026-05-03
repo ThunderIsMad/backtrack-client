@@ -299,4 +299,4 @@ public class AutoClickerModule extends Module {
         }
         return text;
     }
-}t
+}
