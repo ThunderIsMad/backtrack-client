@@ -43,6 +43,17 @@ minecraft {
     mappings = "snapshot_20171003"
     makeObfSourceJar = false
     clientRunArgs += ['--username', 'eblannn']
+    clientRunArgs += ['--tweakClass', 'org.spongepowered.asm.launch.MixinTweaker']
+    clientJvmArgs = [
+            "-Xmx3G",
+            "-Xms1G",
+            "-XX:+UseG1GC",
+            "-XX:MaxGCPauseMillis=50",
+            "-XX:G1HeapRegionSize=32M",
+            "-XX:+UnlockExperimentalVMOptions",
+            "-XX:G1NewSizePercent=20",
+            "-XX:G1ReservePercent=20"
+    ]
 }
 
 repositories {
@@ -60,20 +71,14 @@ repositories {
 
 dependencies {
     compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:${kotlin_version}"
-    // compile scope puts the mixin AP on javac's processor path so it generates the refmap
     compile('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
         exclude module: 'launchwrapper'
         exclude module: 'guava'
         exclude module: 'gson'
         exclude module: 'commons-io'
     }
-    // shadow bundles the mixin runtime into the output jar
-    shadow('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
-        exclude module: 'launchwrapper'
-        exclude module: 'guava'
-        exclude module: 'gson'
-        exclude module: 'commons-io'
-    }
+
+    // Только kotlin бандлится — mixin НЕ бандлится
     shadow "org.jetbrains.kotlin:kotlin-stdlib-jdk8:${kotlin_version}"
 }
 
@@ -90,21 +95,20 @@ mixin {
     add sourceSets.main, 'mixins.backtrack.refmap.json'
 }
 
-// The Mixin AP writes the refmap to build/tmp/compileJava/.
-// Copy it into resourcesDir after compilation so it ends up in the jar.
 compileJava.doLast {
     copy {
-        from "${buildDir}/tmp/compileJava/mixins.backtrack.refmap.json"
+        from "${buildDir}/tmp/compileJava"
         into sourceSets.main.output.resourcesDir
+        include '*.json'
     }
 }
 
 jar {
     manifest {
         attributes([
-            "TweakClass"    : "org.spongepowered.asm.launch.MixinTweaker",
-            "MixinConfigs"  : "mixins.backtrack.json",
-            "ForceLoadAsMod": true
+                "TweakClass"    : "org.spongepowered.asm.launch.MixinTweaker",
+                "MixinConfigs"  : "mixins.backtrack.json",
+                "ForceLoadAsMod": true
         ])
     }
 }
@@ -112,18 +116,23 @@ jar {
 shadowJar {
     configurations = [project.configurations.shadow]
     classifier = ''
+
+    // Mixin не бандлится — предоставляется Forge через MixinTweaker
+    exclude 'org/spongepowered/**'
+    exclude 'META-INF/services/org.spongepowered.**'
+
     manifest {
         attributes([
-            "Specification-Title"      : "Backtrack",
-            "Specification-Vendor"     : "yourname",
-            "Specification-Version"    : "1",
-            "Implementation-Title"     : project.name,
-            "Implementation-Version"   : "${version}",
-            "Implementation-Vendor"    : "yourname",
-            "Implementation-Timestamp" : new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
-            "TweakClass"               : "org.spongepowered.asm.launch.MixinTweaker",
-            "MixinConfigs"             : "mixins.backtrack.json",
-            "ForceLoadAsMod"           : true
+                "Specification-Title"      : "Backtrack",
+                "Specification-Vendor"     : "yourname",
+                "Specification-Version"    : "1",
+                "Implementation-Title"     : project.name,
+                "Implementation-Version"   : "${version}",
+                "Implementation-Vendor"    : "yourname",
+                "Implementation-Timestamp" : new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                "TweakClass"               : "org.spongepowered.asm.launch.MixinTweaker",
+                "MixinConfigs"             : "mixins.backtrack.json",
+                "ForceLoadAsMod"           : true
         ])
     }
 }

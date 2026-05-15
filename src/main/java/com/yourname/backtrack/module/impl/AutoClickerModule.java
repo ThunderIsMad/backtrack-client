@@ -15,11 +15,6 @@ import org.lwjgl.input.Mouse;
 
 import java.util.Random;
 
-/**
- * AutoClicker – человеческое распределение + редкие двойные клики.
- * Первые несколько тиков после нажатия ЛКМ модуль не вмешивается,
- * чтобы можно было выполнять одиночные удары.
- */
 public class AutoClickerModule extends Module {
 
     /* ── Attack ────────────────────────────── */
@@ -28,7 +23,7 @@ public class AutoClickerModule extends Module {
     private final BooleanSetting smartAttack      = new BooleanSetting("Smart Attack", false);
     private final BooleanSetting onlyOnTarget     = new BooleanSetting("Only On Target", false);
     private final BooleanSetting attackOnNoInput  = new BooleanSetting("Attack No Input", false);
-    private final NumberSetting  pressDelayTicks  = new NumberSetting("Press Delay", 3, 0, 10, 1);  // тиков молчания после нажатия
+    private final NumberSetting  pressDelayTicks  = new NumberSetting("Press Delay", 3, 0, 10, 1);
 
     /* ── Use (right click) ─────────────────── */
     private final BooleanSetting useClicker       = new BooleanSetting("Use Clicker", false);
@@ -95,9 +90,8 @@ public class AutoClickerModule extends Module {
         boolean attackPressed = Mouse.isButtonDown(0) || attackOnNoInput.getValue();
 
         if (attackPressed) {
-            // Обнаружение фронта нажатия
             if (!attackWasPressed) {
-                ticksSincePress = 0;      // сброс счётчика
+                ticksSincePress = 0;
                 attackWasPressed = true;
             } else {
                 if (ticksSincePress < delayTicks) {
@@ -113,13 +107,11 @@ public class AutoClickerModule extends Module {
 
             updateAttackWindow(now);
 
-            // Пока не истекла задержка после нажатия – не эмулируем ничего
             if (ticksSincePress < delayTicks) {
                 KeyBinding.setKeyBindState(mc().gameSettings.keyBindAttack.getKeyCode(), false);
                 return;
             }
 
-            // Обработка отложенного дабл-клика
             if (doubleClickPending) {
                 if (now >= lastAttackTime + doubleClickGap) {
                     performClick();
@@ -166,10 +158,9 @@ public class AutoClickerModule extends Module {
                 lastAttackTime = now;
                 nextAttackDelay = calculateHumanDelay(minCps.getValue(), maxCps.getValue());
 
-                // Редкий двойной клик (обход Bursts)
                 if (random.nextDouble() < 0.08) {
                     doubleClickPending = true;
-                    doubleClickGap = random.nextInt(15) + 10; // 10-25 мс
+                    doubleClickGap = random.nextInt(15) + 10;
                 }
             } else {
                 KeyBinding.setKeyBindState(mc().gameSettings.keyBindAttack.getKeyCode(), false);
@@ -241,7 +232,7 @@ public class AutoClickerModule extends Module {
     private long calculateHumanDelay(double minCps, double maxCps) {
         long now = System.currentTimeMillis();
         if (now - lastOffsetChange > 3000 + random.nextInt(2000)) {
-            currentCpsOffset = (random.nextDouble() - 0.5) * 2.0; // ±1 CPS
+            currentCpsOffset = (random.nextDouble() - 0.5) * 2.0;
             lastOffsetChange = now;
         }
 

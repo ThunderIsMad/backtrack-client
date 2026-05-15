@@ -25,12 +25,6 @@ public class MixinNetHandlerPlayClient {
         FlagLogger.log(mod, mc, packet);
     }
 
-    /**
-     * Intercept SPacketEntityVelocity before vanilla applies it.
-     *
-     * 1. Notify VelocityModule of the incoming velocity (fall-damage / knockback detection).
-     * 2. Let VelocityModule modify or cancel the packet.
-     */
     @Inject(method = "handleEntityVelocity", at = @At("HEAD"), cancellable = true)
     private void onHandleEntityVelocity(SPacketEntityVelocity packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getMinecraft();
@@ -43,22 +37,13 @@ public class MixinNetHandlerPlayClient {
         VelocityModule vm = mod.getModuleManager().getModule(VelocityModule.class);
         if (vm == null) return;
 
-        // Notify VelocityModule of the incoming velocity packet (fall-damage / knockback detection).
-        double vx = packet.getMotionX() / 8000.0;
-        double vy = packet.getMotionY() / 8000.0;
-        double vz = packet.getMotionZ() / 8000.0;
-        vm.notifyVelocityPacket(vx, vy, vz);
-
-        // Let VelocityModule modify or cancel the packet.
+        // Let VelocityModule process the packet (Modify, Reverse trigger, etc.)
         VelocityModule.SPacketEntityVelocityAccessor accessor =
                 (VelocityModule.SPacketEntityVelocityAccessor)(Object) packet;
 
         if (vm.handleVelocityPacket(accessor)) ci.cancel();
     }
 
-    /**
-     * Intercept SPacketExplosion for Modify mode.
-     */
     @Inject(method = "handleExplosion", at = @At("HEAD"))
     private void onHandleExplosion(SPacketExplosion packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getMinecraft();

@@ -14,11 +14,6 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(PlayerControllerMP.class)
 public class MixinPlayerControllerMP {
 
-    /**
-     * Fire VelocityModule.onAttack() when the player attacks an entity.
-     * This enables ReduceOnAttack: multiply XZ motion when attacking
-     * while the target is in the hurtTime window.
-     */
     @Inject(method = "attackEntity", at = @At("HEAD"))
     private void onAttackEntity(EntityPlayer player, Entity targetEntity, CallbackInfo ci) {
         Minecraft mc = Minecraft.getMinecraft();

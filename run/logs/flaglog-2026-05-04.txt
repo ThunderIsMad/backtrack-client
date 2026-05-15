@@ -1,0 +1,42 @@
+[14:46:32] SETBACK detected
+  Active modules : AutoSprint, AutoClicker, Velocity
+  Player pos     : -233.456 230.000 -8.029
+  Server pos     : -233.175 230.311 -7.629
+  Distance       : 0.58 blocks
+  Hurt time      : 9
+
+[14:57:30] SETBACK detected
+  Active modules : AutoSprint, AutoClicker, Velocity
+  Player pos     : -234.006 230.427 -12.336
+  Server pos     : -233.176 230.000 -11.906
+  Distance       : 1.03 blocks
+  Hurt time      : 6
+
+[14:57:31] SETBACK detected
+  Active modules : AutoSprint, AutoClicker, Velocity
+  Player pos     : -234.499 230.053 -10.858
+  Server pos     : -234.044 230.311 -10.836
+  Distance       : 0.52 blocks
+  Hurt time      : 9
+
+[15:28:25] SETBACK detected
+  Active modules : AutoSprint, FullBright, AutoClicker, Velocity
+  Player pos     : -231.797 230.000 -5.940
+  Server pos     : -232.063 230.269 -6.383
+  Distance       : 0.58 blocks
+  Hurt time      : 1
+
+[15:28:25] SETBACK detected
+  Active modules : AutoSprint, FullBright, AutoClicker, Velocity
+  Player pos     : -231.818 230.000 -5.783
+  Server pos     : -231.982 230.022 -6.258
+  Distance       : 0.50 blocks
+  Hurt time      : 1
+
+[15:28:25] SETBACK detected
+  Active modules : AutoSprint, FullBright, AutoClicker, Velocity
+  Player pos     : -231.818 230.000 -5.783
+  Server pos     : -232.063 230.269 -6.383
+  Distance       : 0.70 blocks
+  Hurt time      : 1
+

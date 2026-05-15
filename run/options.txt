@@ -2,12 +2,12 @@ version:1343
 invertYMouse:false
 mouseSensitivity:0.09859155
 fov:0.7
-gamma:1.0
+gamma:20.0
 saturation:0.0
 renderDistance:2
 guiScale:3
-particles:1
-bobView:true
+particles:2
+bobView:false
 anaglyph3d:false
 maxFps:260
 fboEnable:true
@@ -106,16 +106,16 @@ key_HUD Spacing -:209
 key_HUD Background:68
 key_HUD Text Mode:87
 key_Open ClickGUI:54
-soundCategory_master:0.01655629
+soundCategory_master:0.009933775
 soundCategory_music:0.0
-soundCategory_record:1.0
+soundCategory_record:0.47887325
 soundCategory_weather:0.0
-soundCategory_block:1.0
-soundCategory_hostile:1.0
-soundCategory_neutral:1.0
-soundCategory_player:1.0
-soundCategory_ambient:1.0
-soundCategory_voice:1.0
+soundCategory_block:0.44366196
+soundCategory_hostile:0.5140845
+soundCategory_neutral:0.46478873
+soundCategory_player:0.5422535
+soundCategory_ambient:0.471831
+soundCategory_voice:0.5070422
 modelPart_cape:true
 modelPart_jacket:true
 modelPart_left_sleeve:true

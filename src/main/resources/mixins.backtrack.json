@@ -6,6 +6,7 @@
   "client": [
     "client.MixinNetHandlerPlayClient",
     "client.MixinPlayerControllerMP",
-    "client.MixinSPacketEntityVelocity"
+    "client.MixinSPacketEntityVelocity",
+    "client.MixinSPacketExplosion"
   ]
 }
