@@ -7,7 +7,6 @@ import com.yourname.backtrack.setting.Setting;
 import setting.SettingGroup;
 import com.yourname.backtrack.gui.HudEditorScreen;
 import net.minecraft.client.Minecraft;
-import net.minecraftforge.client.event.InputUpdateEvent;
 import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.util.text.TextComponentString;
 import org.lwjgl.input.Keyboard;
@@ -141,7 +140,8 @@ public abstract class Module {
         sendClientMessage(name + ": OFF");
     }
 
-    public void onInputUpdate(InputUpdateEvent event) {
+    /** Called every tick from ModuleManager.onTick() — override in subclasses for per-tick logic. */
+    public void onClientTick() {
     }
 
     protected void sendClientMessage(String message) {

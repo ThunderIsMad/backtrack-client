@@ -1,4 +1,3 @@
-// PacketUtils.java
 package com.yourname.backtrack.module.impl;
 
 import net.minecraft.client.Minecraft;
@@ -13,7 +12,6 @@ public class PacketUtils {
         return Minecraft.getMinecraft();
     }
 
-    @SuppressWarnings("unchecked")
     public static void receivePacket(Packet<?> packet) {
         if (mc().getConnection() == null) return;
         try {

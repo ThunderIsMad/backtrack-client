@@ -1,5 +1,6 @@
 package com.yourname.backtrack.module;
 
+import com.yourname.backtrack.input.KeybindHandler;
 import com.yourname.backtrack.module.impl.AutoClickerModule;
 import com.yourname.backtrack.module.impl.AutoRespawnModule;
 import com.yourname.backtrack.module.impl.AutoSprintModule;
@@ -7,6 +8,7 @@ import com.yourname.backtrack.module.impl.FullBrightModule;
 import com.yourname.backtrack.module.impl.KeepSprintModule;
 import com.yourname.backtrack.module.impl.VelocityModule;
 import com.yourname.backtrack.module.impl.WTapModule;
+import net.minecraft.client.Minecraft;
 import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.client.registry.ClientRegistry;
 import java.util.ArrayList;
@@ -14,6 +16,10 @@ import java.util.Collections;
 import java.util.List;
 
 public class ModuleManager {
+
+    private KeybindHandler keybindHandler;
+
+    public void setKeybindHandler(KeybindHandler h) { this.keybindHandler = h; }
 
     private final List<Module> modules = new ArrayList<>();
 
@@ -43,5 +49,19 @@ public class ModuleManager {
             if (clazz.isInstance(m)) return clazz.cast(m);
         }
         return null;
+    }
+
+    public void onTick() {
+        if (Minecraft.getMinecraft().player == null) return;
+
+        if (keybindHandler != null) {
+            keybindHandler.onTick();
+        }
+
+        for (Module module : modules) {
+            if (module.isEnabled()) {
+                module.onClientTick();
+            }
+        }
     }
 }

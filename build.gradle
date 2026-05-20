@@ -70,7 +70,6 @@ repositories {
 }
 
 dependencies {
-    compile "org.jetbrains.kotlin:kotlin-stdlib-jdk8:${kotlin_version}"
     compile('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
         exclude module: 'launchwrapper'
         exclude module: 'guava'
@@ -78,8 +77,13 @@ dependencies {
         exclude module: 'commons-io'
     }
 
-    // Только kotlin бандлится — mixin НЕ бандлится
     shadow "org.jetbrains.kotlin:kotlin-stdlib-jdk8:${kotlin_version}"
+    shadow('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
+        exclude module: 'launchwrapper'
+        exclude module: 'guava'
+        exclude module: 'gson'
+        exclude module: 'commons-io'
+    }
 }
 
 compileKotlin {
@@ -116,10 +120,6 @@ jar {
 shadowJar {
     configurations = [project.configurations.shadow]
     classifier = ''
-
-    // Mixin не бандлится — предоставляется Forge через MixinTweaker
-    exclude 'org/spongepowered/**'
-    exclude 'META-INF/services/org.spongepowered.**'
 
     manifest {
         attributes([

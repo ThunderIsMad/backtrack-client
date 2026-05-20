@@ -10,6 +10,7 @@ import com.yourname.backtrack.util.IntaveChatLogger;
 import com.yourname.backtrack.input.KeybindHandler;
 import com.yourname.backtrack.module.ModuleManager;
 import net.minecraftforge.common.MinecraftForge;
+import com.yourname.backtrack.client.ClientTickHandler;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
@@ -46,7 +47,6 @@ public class SoloBacktrack {
 
     @Mod.EventHandler
     public void postInit(FMLPostInitializationEvent event) {
-        // Minecraft.getMinecraft() is guaranteed non-null by postInit
         moduleManager = new ModuleManager();
         hudSettings = new HudSettings();
         configManager = new ConfigManager();
@@ -58,10 +58,14 @@ public class SoloBacktrack {
         configManager.loadModuleHudSettings(moduleManager);
         configManager.loadModuleStates(moduleManager);
 
-        MinecraftForge.EVENT_BUS.register(new KeybindHandler(moduleManager, configManager));
+        final KeybindHandler keybindHandler = new KeybindHandler(moduleManager, configManager);
+        moduleManager.setKeybindHandler(keybindHandler);
+        MinecraftForge.EVENT_BUS.register(keybindHandler);
+
         MinecraftForge.EVENT_BUS.register(new HudRenderer(moduleManager, hudSettings));
         MinecraftForge.EVENT_BUS.register(new HudControlHandler(hudSettings, configManager));
         MinecraftForge.EVENT_BUS.register(new GuiOpener(moduleManager, configManager, hudSettings, guiTheme));
         MinecraftForge.EVENT_BUS.register(new IntaveChatLogger());
+        MinecraftForge.EVENT_BUS.register(new ClientTickHandler());
     }
 }

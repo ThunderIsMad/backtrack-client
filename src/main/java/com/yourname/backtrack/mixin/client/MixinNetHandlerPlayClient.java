@@ -3,6 +3,7 @@ package com.yourname.backtrack.mixin.client;
 import com.yourname.backtrack.SoloBacktrack;
 import com.yourname.backtrack.module.impl.VelocityModule;
 import com.yourname.backtrack.util.FlagLogger;
+import com.yourname.backtrack.client.ClientSimulator;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.network.NetHandlerPlayClient;
 import net.minecraft.network.play.server.SPacketEntityVelocity;
@@ -18,6 +19,7 @@ public class MixinNetHandlerPlayClient {
 
     @Inject(method = "handlePlayerPosLook", at = @At("HEAD"))
     private void onHandlePlayerPosLook(SPacketPlayerPosLook packet, CallbackInfo ci) {
+        ClientSimulator.INSTANCE.handleTeleport(packet.getX(), packet.getY(), packet.getZ());
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.player == null || mc.world == null) return;
         SoloBacktrack mod = SoloBacktrack.getInstance();
@@ -35,9 +37,14 @@ public class MixinNetHandlerPlayClient {
         if (mod == null) return;
 
         VelocityModule vm = mod.getModuleManager().getModule(VelocityModule.class);
-        if (vm == null) return;
+        if (vm == null || !vm.isEnabled()) return;
 
-        // Let VelocityModule process the packet (Modify, Reverse trigger, etc.)
+        ClientSimulator.INSTANCE.applyVelocity(
+                packet.getMotionX() / 8000.0,
+                packet.getMotionY() / 8000.0,
+                packet.getMotionZ() / 8000.0
+        );
+
         VelocityModule.SPacketEntityVelocityAccessor accessor =
                 (VelocityModule.SPacketEntityVelocityAccessor)(Object) packet;
 
@@ -53,7 +60,13 @@ public class MixinNetHandlerPlayClient {
         if (mod == null) return;
 
         VelocityModule vm = mod.getModuleManager().getModule(VelocityModule.class);
-        if (vm == null) return;
+        if (vm == null || !vm.isEnabled()) return;
+
+        ClientSimulator.INSTANCE.applyExplosion(
+                packet.getMotionX(),
+                packet.getMotionY(),
+                packet.getMotionZ()
+        );
 
         vm.handleExplosion(packet);
     }

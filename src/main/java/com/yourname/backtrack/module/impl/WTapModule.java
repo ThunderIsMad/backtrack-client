@@ -8,7 +8,6 @@ import com.yourname.backtrack.setting.ModeSetting;
 import com.yourname.backtrack.setting.NumberSetting;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.network.play.client.CPacketEntityAction;
-import net.minecraftforge.client.event.InputUpdateEvent;
 import org.lwjgl.input.Keyboard;
 
 import java.util.ArrayList;
@@ -60,7 +59,7 @@ public class WTapModule extends Module {
     }
 
     @Override
-    public void onInputUpdate(InputUpdateEvent event) {
+    public void onClientTick() {
         if (!isEnabled() || mc().player == null || mc().world == null) return;
 
         int hurtTime = mc().player.hurtTime;
@@ -72,7 +71,7 @@ public class WTapModule extends Module {
         switch (m) {
             case "Packet": handlePacket(); break;
             case "SprintTap": handleSprintTap(); break;
-            case "MoveBlock": handleMoveBlock(event); break;
+            case "MoveBlock": handleMoveBlock(); break;
         }
         lastHurtTime = hurtTime;
     }
@@ -162,7 +161,7 @@ public class WTapModule extends Module {
         }
     }
 
-    private void handleMoveBlock(InputUpdateEvent event) {
+    private void handleMoveBlock() {
         if (phase == 0) {
             blockMovement = false;
             return;
@@ -187,8 +186,8 @@ public class WTapModule extends Module {
                 break;
         }
         if (blockMovement) {
-            event.getMovementInput().moveForward = 0.0f;
-            event.getMovementInput().moveStrafe = 0.0f;
+            mc().player.motionX = 0.0;
+            mc().player.motionZ = 0.0;
             mc().player.setSprinting(false);
         }
     }

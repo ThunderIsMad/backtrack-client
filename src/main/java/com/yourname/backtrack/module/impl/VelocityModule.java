@@ -1,5 +1,7 @@
 package com.yourname.backtrack.module.impl;
 
+import com.yourname.backtrack.client.ClientSimulator;
+import com.yourname.backtrack.client.MovementSimState;
 import com.yourname.backtrack.module.Category;
 import com.yourname.backtrack.module.Module;
 import com.yourname.backtrack.setting.Setting;
@@ -10,7 +12,6 @@ import net.minecraft.client.settings.KeyBinding;
 import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.network.play.server.SPacketExplosion;
 import net.minecraft.util.math.RayTraceResult;
-import net.minecraftforge.client.event.InputUpdateEvent;
 import org.lwjgl.input.Keyboard;
 import org.lwjgl.input.Mouse;
 
@@ -82,7 +83,7 @@ public class VelocityModule extends Module {
     // TickZero
     private final NumberSetting tickZeroHurtTime = new NumberSetting("TickZeroHurtTime", 4, 1, 10, 0);
 
-    // Reduce - tied to Intave legitimateDeviation bands from SimulationEvaluator
+    // Reduce
     private final NumberSetting reduceXZ     = new NumberSetting("ReduceXZ",     75, 50, 95, 1);
     private final NumberSetting reduceY      = new NumberSetting("ReduceY",      65, 40, 90, 1);
     private final NumberSetting reduceWindow = new NumberSetting("ReduceWindow", 8,  2,  10, 1);
@@ -102,8 +103,11 @@ public class VelocityModule extends Module {
     private boolean velocityReceived   = false;
     private int     ticksSinceVelocity = 0;
 
-    // Reduce state - tied to pastExternalVelocity window from MovementMetadata
-    private int reduceCounter = 0;
+    // Reduce state
+    private int    reduceCounter = 0;
+    private double reduceTotalRaw     = 0.0;
+    private double reduceTotalReduced = 0.0;
+    private int    reduceWindowActual = 0;
 
     // Reverse state
     private enum ReverseState { IDLE, DELAY, CORRECTING, MOVING }
@@ -148,19 +152,19 @@ public class VelocityModule extends Module {
         int rawZ = pkt.getMotionZ();
 
         double vx = rawX / 8000.0;
+        double vy = rawY / 8000.0;
         double vz = rawZ / 8000.0;
 
         isFallDamage = (rawX == 0 && rawZ == 0 && rawY < 0);
 
         velocityReceived = true;
         ticksSinceVelocity = 0;
-        reduceCounter = 0; // Intave Reduce: reset on new velocity packet (MovementDispatcher pendingVelocityPackets logic)
 
         String sel = mode.getValue();
 
         if (debug.getValue()) {
             sendClientMessage("\u00a7eVel vx=" + String.format("%.3f", vx) +
-                    " vy=" + String.format("%.3f", rawY / 8000.0) +
+                    " vy=" + String.format("%.3f", vy) +
                     " vz=" + String.format("%.3f", vz) +
                     " fall=" + isFallDamage);
         }
@@ -179,10 +183,12 @@ public class VelocityModule extends Module {
                 pkt.setMotionZ((int) (rawZ * xzFactor));
             }
         } else if ("Reverse".equals(sel)) {
-            handleReversePacket(vx, rawY / 8000.0, vz);
+            handleReversePacket(vx, vy, vz);
         } else if ("Reduce".equals(sel)) {
-            // Intave Reduce: leave first evaluated tick (pastExternalVelocity == 0) untouched to avoid aggressive velocityDetected + *20 multiplier in evaluateBestSimulation; only init counter for later ticks
             reduceCounter = (int) reduceWindow.getValue();
+            reduceTotalRaw     = 0.0;
+            reduceTotalReduced = 0.0;
+            reduceWindowActual = 0;
             return false;
         }
 
@@ -283,8 +289,10 @@ public class VelocityModule extends Module {
 
     // ========================== Per-tick update ==========================
 
+    // Убрать import net.minecraftforge.client.event.InputUpdateEvent;
+
     @Override
-    public void onInputUpdate(InputUpdateEvent event) {
+    public void onClientTick() {
         if (!isEnabled() || mc().player == null || mc().world == null) return;
 
         String sel = mode.getValue();
@@ -329,23 +337,85 @@ public class VelocityModule extends Module {
                 handleTickZero();
                 break;
             case "Reduce":
-                handleReduce(); // Intave Reduce: dispatched only for Reduce mode, matches existing onInputUpdate pattern
+                handleReduce();
                 break;
         }
     }
 
     private void handleReduce() {
-        // Intave Reduce: apply multipliers only on ticks after first evaluated tick (ticksSinceVelocity > 0 && reduceCounter > 0); window covers pastExternalVelocity 1–9 exactly as derived from SimulationEvaluator
         if (reduceCounter <= 0) return;
 
-        double xzFactor = reduceXZ.getValue() / 100.0;
-        double yFactor  = reduceY.getValue()  / 100.0;
+        int actualTick = (int) reduceWindow.getValue() - reduceCounter;
+        if (actualTick < 1) {
+            reduceCounter--;
+            return;
+        }
 
-        mc().player.motionX *= xzFactor;
-        mc().player.motionY *= yFactor;
-        mc().player.motionZ *= xzFactor;
+        MovementSimState state = ClientSimulator.INSTANCE.s;
+        double expectedMag = Math.sqrt(
+                state.predictedMotionX * state.predictedMotionX +
+                        state.predictedMotionZ * state.predictedMotionZ);
+        double tolerance = state.toleranceXZ;
+        double userXZ = reduceXZ.getValue() / 100.0;
+        double userY  = reduceY.getValue()  / 100.0;
+
+        double currentMag = Math.sqrt(
+                mc().player.motionX * mc().player.motionX +
+                        mc().player.motionZ * mc().player.motionZ);
+
+        double safeXzFactor = calcSafeFactor(expectedMag, tolerance, userXZ, currentMag);
+        double safeYFactor  = calcSafeFactorY(Math.abs(state.predictedMotionY), state.toleranceY, userY, Math.abs(mc().player.motionY));
+
+        mc().player.motionX *= safeXzFactor;
+        mc().player.motionY *= safeYFactor;
+        mc().player.motionZ *= safeXzFactor;
+
+        double rawMove = expectedMag;
+        double reducedMove = currentMag * safeXzFactor;
+        reduceTotalRaw     += rawMove;
+        reduceTotalReduced += reducedMove;
+        reduceWindowActual++;
+
+        if (debug.getValue()) {
+            double kbPercent = safeXzFactor * 100.0;
+            sendClientMessage("\u00a7dReduce \u00a77t=" + actualTick +
+                    " raw=" + String.format("%.4f", rawMove) +
+                    " reduced=" + String.format("%.4f", reducedMove) +
+                    " kb=" + String.format("%.0f%%", kbPercent) +
+                    " exp=" + String.format("%.4f", expectedMag) +
+                    " tol=" + String.format("%.3f", state.toleranceXZ));
+        }
 
         reduceCounter--;
+
+        if (reduceCounter == 0 && reduceWindowActual > 0) {
+            double saved = reduceTotalRaw - reduceTotalReduced;
+            double pct = (reduceTotalRaw > 0.001) ? (reduceTotalReduced / reduceTotalRaw * 100.0) : 100.0;
+            sendClientMessage("\u00a7aReduce \u00a77window done" +
+                    " raw=" + String.format("%.3f", reduceTotalRaw) + "m" +
+                    " reduced=" + String.format("%.3f", reduceTotalReduced) + "m" +
+                    " saved=" + String.format("%.3f", saved) + "m" +
+                    " (" + String.format("%.0f%%", pct) + ")");
+            reduceTotalRaw = 0.0;
+            reduceTotalReduced = 0.0;
+            reduceWindowActual = 0;
+        }
+    }
+
+    private double calcSafeFactor(double expectedMag, double tolerance, double userFactor, double currentMag) {
+        if (expectedMag < 0.001 || currentMag < 0.001) return userFactor;
+        double deviation = expectedMag * (1.0 - userFactor);
+        if (deviation <= tolerance * 0.9) return userFactor;
+        double minFactor = 1.0 - (tolerance * 0.9 / expectedMag);
+        return Math.min(1.0, Math.max(minFactor, userFactor));
+    }
+
+    private double calcSafeFactorY(double expectedY, double toleranceY, double userFactor, double currentY) {
+        if (expectedY < 0.001 || currentY < 0.001) return userFactor;
+        double deviationY = expectedY * (1.0 - userFactor);
+        if (deviationY <= toleranceY * 0.9) return userFactor;
+        double minFactorY = 1.0 - (toleranceY * 0.9 / expectedY);
+        return Math.min(1.0, Math.max(minFactorY, userFactor));
     }
 
     // ========================== JumpReset ==========================
@@ -737,6 +807,7 @@ public class VelocityModule extends Module {
                 filtered.add(xzModify);
                 filtered.add(yModify);
                 filtered.add(ignoreExplosion);
+                filtered.add(debug);
                 break;
             case "JumpReset":
                 filtered.add(fallDamageCheck);
@@ -766,17 +837,21 @@ public class VelocityModule extends Module {
                 filtered.add(pushStart);
                 filtered.add(pushEnd);
                 filtered.add(pushOnGround);
+                filtered.add(debug);
                 break;
             case "Legit":
                 filtered.add(legitStrafe);
+                filtered.add(debug);
                 break;
             case "TickZero":
                 filtered.add(tickZeroHurtTime);
+                filtered.add(debug);
                 break;
             case "Reduce":
                 filtered.add(reduceXZ);
                 filtered.add(reduceY);
                 filtered.add(reduceWindow);
+                filtered.add(debug);
                 break;
         }
         return filtered;
@@ -805,7 +880,7 @@ public class VelocityModule extends Module {
         currentDelay            = 0;
         velocityReceived        = false;
         ticksSinceVelocity      = 0;
-        reduceCounter           = 0; // Intave Reduce: reset on enable/disable (matches MovementMetadata past* resets)
+        reduceCounter           = 0;
         reverseState            = ReverseState.IDLE;
         reverseTimer            = 0;
         reverseStrafeLeft       = false;
@@ -817,5 +892,8 @@ public class VelocityModule extends Module {
         lastRestartTime         = 0L;
         lastCorrectionStartTime = 0L;
         useConservativeProfile  = false;
+        reduceTotalRaw     = 0.0;
+        reduceTotalReduced = 0.0;
+        reduceWindowActual = 0;
     }
 }

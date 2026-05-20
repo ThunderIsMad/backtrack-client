@@ -3,9 +3,9 @@ package com.yourname.backtrack.input;
 import com.yourname.backtrack.config.ConfigManager;
 import com.yourname.backtrack.module.Module;
 import com.yourname.backtrack.module.ModuleManager;
-import net.minecraftforge.client.event.InputUpdateEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
+import net.minecraftforge.fml.common.gameevent.TickEvent;
 import org.lwjgl.input.Keyboard;
 
 public class KeybindHandler {
@@ -20,10 +20,10 @@ public class KeybindHandler {
 
     @SubscribeEvent
     public void onKeyInput(InputEvent.KeyInputEvent event) {
-        if (!Keyboard.getEventKeyState()) {
-            return;
-        }
-        int pressedKey = Keyboard.getEventKey() == 0 ? Keyboard.getEventCharacter() + 256 : Keyboard.getEventKey();
+        if (!Keyboard.getEventKeyState()) return;
+        int pressedKey = Keyboard.getEventKey() == 0
+                ? Keyboard.getEventCharacter() + 256
+                : Keyboard.getEventKey();
         for (Module module : moduleManager.getModules()) {
             if (module.getKeyCode() == pressedKey) {
                 module.toggle();
@@ -33,12 +33,20 @@ public class KeybindHandler {
         }
     }
 
-    @SubscribeEvent
-    public void onInputUpdate(InputUpdateEvent event) {
+    public void onTick() {
         for (Module module : moduleManager.getModules()) {
-            if (module.isEnabled()) {
-                module.onInputUpdate(event);
+            if (module.getKeyBinding().isPressed()) {
+                module.toggle();
+                configManager.saveModuleStates(moduleManager);
+                break;
             }
+        }
+    }
+
+    @SubscribeEvent
+    public void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase == TickEvent.Phase.START) {
+            moduleManager.onTick();
         }
     }
 }

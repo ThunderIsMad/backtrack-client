@@ -2,6 +2,7 @@ package com.yourname.backtrack.mixin.client;
 
 import com.yourname.backtrack.SoloBacktrack;
 import com.yourname.backtrack.module.impl.VelocityModule;
+import com.yourname.backtrack.client.ClientSimulator;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.PlayerControllerMP;
 import net.minecraft.entity.Entity;
@@ -23,8 +24,9 @@ public class MixinPlayerControllerMP {
         if (mod == null) return;
 
         VelocityModule vm = mod.getModuleManager().getModule(VelocityModule.class);
-        if (vm == null) return;
+        if (vm == null || !vm.isEnabled()) return;
 
+        ClientSimulator.INSTANCE.onAttack();
         vm.onAttack();
     }
 }

@@ -65,7 +65,7 @@ Build: 1.12.2-14.23.5.2846 - Tue Sep 03 21:22:46 GMT 2019
 =========
 Build: 1.12.2-14.23.5.2844 - Thu Aug 29 02:33:00 GMT 2019
 	barteks2x:
-		Fix client sometimes generating biomes, causing incorrect biome
+		Fix com.yourname.backtrack.client sometimes generating biomes, causing incorrect biome
 		generation on integrated server (#5720)
 
 	bs2609:
