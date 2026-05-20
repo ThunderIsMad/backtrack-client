@@ -1,0 +1,14 @@
+[04:58:10] SETBACK detected
+  Active modules : AutoSprint, FullBright, Velocity
+  Player pos     : -234.472 230.680 -8.239
+  Server pos     : -234.447 230.000 -8.298
+  Distance       : 0.68 blocks
+  Hurt time      : 6
+
+[14:58:45] SETBACK detected
+  Active modules : AutoSprint, FullBright, AutoClicker, Velocity
+  Player pos     : -234.707 230.680 -8.198
+  Server pos     : -234.692 230.000 -8.232
+  Distance       : 0.68 blocks
+  Hurt time      : 6
+
