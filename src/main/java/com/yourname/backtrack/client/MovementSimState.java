@@ -27,6 +27,9 @@ public class MovementSimState {
     public static final double FLYING_UNCERTAINTY_RADIUS = 0.03;
     public int physicsPacketRelinkFlyVL;
 
+    /** Accumulated entity-push delta for this tick (added after collision). */
+    public double entityPushX, entityPushZ;
+
     public void beginTick() {
         physicsUnpredictableVelocityExpected = false;
         collidedHorizontally = false;
@@ -34,6 +37,8 @@ public class MovementSimState {
         lastMotionX = predictedMotionX;
         lastMotionY = predictedMotionY;
         lastMotionZ = predictedMotionZ;
+        entityPushX = 0;
+        entityPushZ = 0;
     }
 
     public boolean isInVelocityWindow() { return pastExternalVelocity < 10; }
@@ -78,5 +83,6 @@ public class MovementSimState {
         playerPosX = 0; playerPosY = 0; playerPosZ = 0;
         positionInitialized = false;
         physicsPacketRelinkFlyVL = 0;
+        entityPushX = 0; entityPushZ = 0;
     }
 }

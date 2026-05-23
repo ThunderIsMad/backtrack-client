@@ -25,29 +25,30 @@ public final class MovementPhysicsEngine {
 
         if (s.inWater) {
             simulateWater(mc, s, mx, my, mz);
-            return;
-        }
-        if (s.inLava) {
+        } else if (s.inLava) {
             simulateLava(mc, s, mx, my, mz);
-            return;
-        }
-        if (s.onClimbable) {
+        } else if (s.onClimbable) {
             simulateLadder(mc, s, mx, my, mz);
-            return;
+        } else {
+            double[] acc = accelerateGroundAir(mc, s, mx, my, mz);
+            if (s.jumpKey && (s.onGround || s.lastOnGround)) {
+                acc[1] = s.jumpMotion;
+                if (s.sprintingAllowed && s.sprintKey) {
+                    acc[0] -= s.yawSin * 0.2;
+                    acc[2] += s.yawCos * 0.2;
+                }
+            }
+            double[] out = relink(mc, s, acc[0], acc[1], acc[2]);
+            s.predictedMotionX = out[0];
+            s.predictedMotionY = out[1];
+            s.predictedMotionZ = out[2];
         }
 
-        double[] acc = accelerateGroundAir(mc, s, mx, my, mz);
-        if (s.jumpKey && (s.onGround || s.lastOnGround)) {
-            acc[1] = s.jumpMotion;
-            if (s.sprintingAllowed && s.sprintKey) {
-                acc[0] -= s.yawSin * 0.2;
-                acc[2] += s.yawCos * 0.2;
-            }
+        // Entity push: applied after all motion is resolved, same as vanilla applyEntityCollision
+        if (s.entityPushX != 0 || s.entityPushZ != 0) {
+            s.predictedMotionX += s.entityPushX;
+            s.predictedMotionZ += s.entityPushZ;
         }
-        double[] out = relink(mc, s, acc[0], acc[1], acc[2]);
-        s.predictedMotionX = out[0];
-        s.predictedMotionY = out[1];
-        s.predictedMotionZ = out[2];
     }
 
     private void simulateWater(Minecraft mc, MovementSimState s, double mx, double my, double mz) {

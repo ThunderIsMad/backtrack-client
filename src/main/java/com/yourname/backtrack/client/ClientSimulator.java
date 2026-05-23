@@ -6,6 +6,7 @@ import net.minecraft.entity.SharedMonsterAttributes;
 import net.minecraft.entity.player.EntityPlayer;
 import net.minecraft.enchantment.EnchantmentHelper;
 import net.minecraft.init.Enchantments;
+import net.minecraft.util.math.AxisAlignedBB;
 
 public final class ClientSimulator {
     public static final ClientSimulator INSTANCE = new ClientSimulator();
@@ -16,6 +17,8 @@ public final class ClientSimulator {
     private final MovementPhysicsEngine physics = new MovementPhysicsEngine();
 
     private static final double GRAVITY = 0.08, Y_MULT = 0.98, AIR_SLIP = 0.91;
+    /** Push strength applied per overlapping player (vanilla: 0.05 per axis). */
+    private static final double ENTITY_PUSH_STRENGTH = 0.05;
 
     /** When true, Velocity Reduce/Reverse do not modify player motion (debug/shadow). */
     public boolean shadowMode = false;
@@ -67,10 +70,57 @@ public final class ClientSimulator {
         }
     }
 
+    /**
+     * Scans nearby EntityPlayer instances and accumulates the vanilla applyEntityCollision
+     * push into s.entityPushX / s.entityPushZ.  Called once per tick before simulate().
+     *
+     * Vanilla logic (EntityLivingBase.collideWithNearbyEntities):
+     *   For each other player whose AABB intersects ours (expanded by 0.2 on XZ):
+     *     dx = other.posX - self.posX
+     *     dz = other.posZ - self.posZ
+     *     dist = max(|dx|, |dz|)
+     *     if dist < 0.01: use random offsets
+     *     dist = sqrt(dx*dx + dz*dz)
+     *     normalize, scale by 0.05, divide by dist
+     *     self.motionX -= pushX; self.motionZ -= pushZ
+     */
+    public void collectEntityPush(Minecraft mc) {
+        if (mc.player == null || mc.world == null) return;
+
+        double pushX = 0, pushZ = 0;
+        AxisAlignedBB selfBox = mc.player.getEntityBoundingBox().expand(0.2, 0.0, 0.2);
+
+        for (net.minecraft.entity.Entity e : mc.world.loadedEntityList) {
+            if (!(e instanceof EntityPlayer)) continue;
+            if (e == mc.player) continue;
+            if (!e.noClip && !mc.player.noClip) {
+                AxisAlignedBB otherBox = e.getEntityBoundingBox();
+                if (selfBox.intersects(otherBox)) {
+                    double dx = e.posX - mc.player.posX;
+                    double dz = e.posZ - mc.player.posZ;
+                    double maxDelta = Math.max(Math.abs(dx), Math.abs(dz));
+                    if (maxDelta >= 0.01) {
+                        double dist = Math.sqrt(dx * dx + dz * dz);
+                        dx /= dist;
+                        dz /= dist;
+                        double scale = Math.min(1.0, ENTITY_PUSH_STRENGTH / maxDelta);
+                        // other pushes us: we subtract (vanilla: attacker subtracts from self)
+                        pushX -= dx * scale;
+                        pushZ -= dz * scale;
+                    }
+                }
+            }
+        }
+
+        s.entityPushX = pushX;
+        s.entityPushZ = pushZ;
+    }
+
     public void simulate() {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.player == null) return;
 
+        collectEntityPush(mc);
         inputCapture.capture(s, mc);
         maybeSearchKeys(mc);
         physics.simulate(s);
