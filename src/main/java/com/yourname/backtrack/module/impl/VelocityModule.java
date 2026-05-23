@@ -1,7 +1,6 @@
 package com.yourname.backtrack.module.impl;
 
 import com.yourname.backtrack.client.ClientSimulator;
-import com.yourname.backtrack.client.MovementSimState;
 import com.yourname.backtrack.client.SimDebug;
 import com.yourname.backtrack.module.Category;
 import com.yourname.backtrack.module.Module;
@@ -102,8 +101,7 @@ public class VelocityModule extends Module {
     private boolean pendingJump    = false;
     private boolean jumpKeyHeld    = false;
 
-    private boolean velocityReceived   = false;
-    private int     ticksSinceVelocity = 0;
+    private boolean velocityReceived = false;
 
     // Reduce state
     private int    reduceCounter = 0;
@@ -116,8 +114,6 @@ public class VelocityModule extends Module {
     private ReverseState reverseState        = ReverseState.IDLE;
     private int     reverseTimer             = 0;
     private boolean reverseStrafeLeft        = false;
-    private double  reverseOriginalVelX      = 0.0;
-    private double  reverseOriginalVelZ      = 0.0;
     private double  reverseOriginalVelY      = 0.0;
     private int     ticksSinceCorrection     = 0;
     private int     restartCount             = 0;
@@ -129,7 +125,7 @@ public class VelocityModule extends Module {
 
     public VelocityModule() {
         super("Velocity", Category.COMBAT, Keyboard.KEY_NONE);
-        addSettings(new Setting[] { mode,
+        addSettings(mode,
                 xzModify, yModify, ignoreExplosion,
                 fallDamageCheck, debug, simDebugLog, chance, resetTicks, cooldownTicks,
                 randomize, delayMin, delayMax, maxDistance,
@@ -140,7 +136,7 @@ public class VelocityModule extends Module {
                 pushXZ, pushStart, pushEnd, pushOnGround,
                 legitStrafe,
                 tickZeroHurtTime,
-                reduceXZ, reduceY, reduceWindow });
+                reduceXZ, reduceY, reduceWindow);
         addHudSettings();
     }
 
@@ -164,12 +160,11 @@ public class VelocityModule extends Module {
         isFallDamage = (rawX == 0 && rawZ == 0 && rawY < 0);
 
         velocityReceived = true;
-        ticksSinceVelocity = 0;
 
         String sel = mode.getValue();
 
         if (debug.getValue()) {
-            sendClientMessage("\u00a7eVel vx=" + String.format("%.3f", vx) +
+            sendClientMessage("§eVel vx=" + String.format("%.3f", vx) +
                     " vy=" + String.format("%.3f", vy) +
                     " vz=" + String.format("%.3f", vz) +
                     " fall=" + isFallDamage);
@@ -221,15 +216,13 @@ public class VelocityModule extends Module {
         long now = System.currentTimeMillis();
 
         if (reverseState == ReverseState.DELAY) {
-            reverseOriginalVelX = vx;
-            reverseOriginalVelZ = vz;
             reverseOriginalVelY = vy;
             reverseTimer = 1;
             ticksSinceCorrection = 0;
             lastCorrectionStartTime = now;
             useConservativeProfile = true;
             if (reverseDebug.getValue()) {
-                sendClientMessage("\u00a7dReverse \u00a77DELAY updated target (conservative)" +
+                sendClientMessage("§dReverse §7DELAY updated target (conservative)" +
                         " vx=" + String.format("%.3f", vx) +
                         " vy=" + String.format("%.3f", vy) +
                         " vz=" + String.format("%.3f", vz));
@@ -241,7 +234,7 @@ public class VelocityModule extends Module {
             long elapsed = now - lastCorrectionStartTime;
             if (elapsed < 150) {
                 if (reverseDebug.getValue()) {
-                    sendClientMessage("\u00a7dReverse \u00a77cooldown " +
+                    sendClientMessage("§dReverse §7cooldown " +
                             elapsed + "ms, skipping");
                 }
                 return;
@@ -255,7 +248,7 @@ public class VelocityModule extends Module {
         lastRestartTime = now;
         if (restartCount > 8) {
             if (reverseDebug.getValue()) {
-                sendClientMessage("\u00a7dReverse \u00a77burst protection, skipping");
+                sendClientMessage("§dReverse §7burst protection, skipping");
             }
             return;
         }
@@ -263,18 +256,12 @@ public class VelocityModule extends Module {
         if (reverseState == ReverseState.CORRECTING || reverseState == ReverseState.MOVING) {
             stopReverseMovement();
             if (reverseDebug.getValue()) {
-                sendClientMessage("\u00a7dReverse \u00a77new velocity, resetting");
+                sendClientMessage("§dReverse §7new velocity, resetting");
             }
         }
 
-        if (reverseState == ReverseState.IDLE && (now - lastCorrectionStartTime) >= 300) {
-            useConservativeProfile = false;
-        } else {
-            useConservativeProfile = true;
-        }
+        useConservativeProfile = reverseState != ReverseState.IDLE || (now - lastCorrectionStartTime) < 300;
 
-        reverseOriginalVelX = vx;
-        reverseOriginalVelZ = vz;
         reverseOriginalVelY = vy;
 
         reverseState = ReverseState.DELAY;
@@ -283,7 +270,7 @@ public class VelocityModule extends Module {
         lastCorrectionStartTime = now;
 
         if (reverseDebug.getValue()) {
-            sendClientMessage("\u00a7dReverse \u00a77queued, delaying 1 tick (" +
+            sendClientMessage("§dReverse §7queued, delaying 1 tick (" +
                     (useConservativeProfile ? "conservative" : "idle") + ")" +
                     " vx=" + String.format("%.3f", vx) +
                     " vy=" + String.format("%.3f", vy) +
@@ -312,9 +299,6 @@ public class VelocityModule extends Module {
 
         if (!ClientSimulator.INSTANCE.isInVelocityWindow()) {
             velocityReceived = false;
-            ticksSinceVelocity = 0;
-        } else if (velocityReceived) {
-            ticksSinceVelocity++;
         }
 
         String sel = mode.getValue();
@@ -334,7 +318,6 @@ public class VelocityModule extends Module {
             ticksSinceHit = 0;
         }
         wasHurt = isHurt;
-
 
         boolean justLanded = prevMotionY < -0.01 && mc().player.onGround;
         prevMotionY = mc().player.motionY;
@@ -391,16 +374,15 @@ public class VelocityModule extends Module {
         mc().player.motionY *= safeYFactor;
         mc().player.motionZ *= safeXzFactor;
 
-        double rawMove = expectedMag;
         double reducedMove = currentMag * safeXzFactor;
-        reduceTotalRaw     += rawMove;
+        reduceTotalRaw     += expectedMag;
         reduceTotalReduced += reducedMove;
         reduceWindowActual++;
 
         if (debug.getValue()) {
             double kbPercent = safeXzFactor * 100.0;
-            sendClientMessage("\u00a7dReduce \u00a77t=" + actualTick +
-                    " raw=" + String.format("%.4f", rawMove) +
+            sendClientMessage("§dReduce §7t=" + actualTick +
+                    " raw=" + String.format("%.4f", expectedMag) +
                     " reduced=" + String.format("%.4f", reducedMove) +
                     " kb=" + String.format("%.0f%%", kbPercent) +
                     " exp=" + String.format("%.4f", expectedMag) +
@@ -412,7 +394,7 @@ public class VelocityModule extends Module {
         if (reduceCounter == 0 && reduceWindowActual > 0 && debug.getValue()) {
             double saved = reduceTotalRaw - reduceTotalReduced;
             double pct = (reduceTotalRaw > 0.001) ? (reduceTotalReduced / reduceTotalRaw * 100.0) : 100.0;
-            sendClientMessage("\u00a7aReduce \u00a77window done" +
+            sendClientMessage("§aReduce §7window done" +
                     " raw=" + String.format("%.3f", reduceTotalRaw) + "m" +
                     " reduced=" + String.format("%.3f", reduceTotalReduced) + "m" +
                     " saved=" + String.format("%.3f", saved) + "m" +
@@ -496,7 +478,7 @@ public class VelocityModule extends Module {
         mc().player.motionY = jumpMotion;
 
         if (debug.getValue()) {
-            sendClientMessage("\u00a7aJR \u00a77tick=" + ticksSinceHit +
+            sendClientMessage("§aJR §7tick=" + ticksSinceHit +
                     " hurt=" + mc().player.hurtTime +
                     " yMotion=" + String.format("%.3f", jumpMotion) +
                     " var=" + String.format("%.3f", variation));
@@ -514,7 +496,7 @@ public class VelocityModule extends Module {
         if (mc().player == null || mc().world == null) return false;
 
         EntityLivingBase lastAttacked = mc().player.getLastAttackedEntity();
-        if (lastAttacked == null || lastAttacked.isDead) return false;
+        if (lastAttacked.isDead) return false;
 
         if (mc().objectMouseOver == null) return false;
         if (mc().objectMouseOver.typeOfHit != RayTraceResult.Type.ENTITY) return false;
@@ -564,7 +546,7 @@ public class VelocityModule extends Module {
                         if (random.nextDouble() < pBreak) {
                             reverseTimer = 3;
                             if (reverseDebug.getValue()) {
-                                sendClientMessage("\u00a7dReverse \u00a77pattern break — shortened to " +
+                                sendClientMessage("§dReverse §7pattern break — shortened to " +
                                         (reverseTimer + 1) + " ticks");
                             }
                             break;
@@ -581,7 +563,7 @@ public class VelocityModule extends Module {
                     stopReverseMovement();
                     resetReverseState();
                     if (reverseDebug.getValue()) {
-                        sendClientMessage("\u00a7dReverse \u00a77finished");
+                        sendClientMessage("§dReverse §7finished");
                     }
                 }
                 break;
@@ -604,7 +586,7 @@ public class VelocityModule extends Module {
         }
 
         if (reverseDebug.getValue()) {
-            sendClientMessage("\u00a7dReverse \u00a77correcting for " + reverseTimer + " ticks (" +
+            sendClientMessage("§dReverse §7correcting for " + reverseTimer + " ticks (" +
                     (useConservativeProfile ? "conservative" : "idle") + ")" +
                     (reverseJump.getValue() && mc().player.onGround
                             && Math.abs(reverseOriginalVelY) < 0.2 ? " + jump" : ""));
@@ -633,7 +615,7 @@ public class VelocityModule extends Module {
         mc().player.motionZ = predictedZ;
 
         if (reverseDebug.getValue() && ticksSinceCorrection < 5) {
-            sendClientMessage("\u00a7dCorrection \u00a77t=" + ticksSinceCorrection +
+            sendClientMessage("§dCorrection §7t=" + ticksSinceCorrection +
                     " x=" + String.format("%.4f", predictedX) +
                     " y=" + String.format("%.4f", predictedY) +
                     " z=" + String.format("%.4f", predictedZ) +
@@ -679,7 +661,7 @@ public class VelocityModule extends Module {
         }
 
         if (reverseDebug.getValue()) {
-            sendClientMessage("\u00a7dReverse \u00a77moving forward " + reverseTimer + " ticks, strafe=" +
+            sendClientMessage("§dReverse §7moving forward " + reverseTimer + " ticks, strafe=" +
                     (reverseStrafeLeft ? "left" : (mc().gameSettings.keyBindRight.isKeyDown() ? "right" : "none")));
         }
     }
@@ -697,8 +679,6 @@ public class VelocityModule extends Module {
         releaseJumpKey();
         reverseState = ReverseState.IDLE;
         reverseTimer = 0;
-        reverseOriginalVelX = 0.0;
-        reverseOriginalVelZ = 0.0;
         reverseOriginalVelY = 0.0;
         ticksSinceCorrection = 0;
         restartCount = 0;
@@ -716,7 +696,7 @@ public class VelocityModule extends Module {
         mc().player.motionY = 0.42 + variation;
 
         if (reverseDebug.getValue()) {
-            sendClientMessage("\u00a7dReverse \u00a77jump y=" +
+            sendClientMessage("§dReverse §7jump y=" +
                     String.format("%.3f", mc().player.motionY));
         }
     }
@@ -758,7 +738,7 @@ public class VelocityModule extends Module {
     // ========================== On Attack ==========================
 
     public void onAttack() {
-        if (!isEnabled() || mc().player == null || mc().player.getLastAttackedEntity() == null) return;
+        if (!isEnabled() || mc().player == null) return;
 
         if ("JumpReset".equals(mode.getValue()) && ClientSimulator.INSTANCE.isInVelocityWindow()) {
             return;
@@ -861,13 +841,10 @@ public class VelocityModule extends Module {
         delayCounter            = 0;
         currentDelay            = 0;
         velocityReceived        = false;
-        ticksSinceVelocity      = 0;
         reduceCounter           = 0;
         reverseState            = ReverseState.IDLE;
         reverseTimer            = 0;
         reverseStrafeLeft       = false;
-        reverseOriginalVelX     = 0.0;
-        reverseOriginalVelZ     = 0.0;
         reverseOriginalVelY     = 0.0;
         ticksSinceCorrection    = 0;
         restartCount            = 0;
