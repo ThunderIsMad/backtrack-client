@@ -351,13 +351,13 @@ public class VelocityModule extends Module {
         // reduceCounter стартует с window+1, поэтому grace тик — это когда actualTick==0
         int actualTick = (int) reduceWindow.getValue() + 1 - reduceCounter;
 
-        // Фикс 1: пропускаем grace тик (actualTick==0) — симулятор синхронизирует tolerance
+        // Пропускаем grace тик (actualTick==0) — симулятор синхронизирует tolerance
         if (actualTick < 1) {
             reduceCounter--;
             return;
         }
 
-        // Фикс 3: пропускаем первые 2 тика в воздухе — FLYING тег от Intave
+        // Пропускаем первые 2 тика в воздухе — FLYING тег от Intave
         if (actualTick < 3 && !mc().player.onGround) {
             reduceCounter--;
             return;
@@ -370,12 +370,18 @@ public class VelocityModule extends Module {
         double userXZ = reduceXZ.getValue() / 100.0;
         double userY  = reduceY.getValue()  / 100.0;
 
+        // Нелинейная рампа: на тике 1 снижаем мало, к тику window — максимально.
+        // ramp: 0.125 → 1.0 при window=8
+        double ramp = (double) actualTick / (int) reduceWindow.getValue();
+        double effectiveUserXZ = 1.0 - (1.0 - userXZ) * ramp;
+        double effectiveUserY  = 1.0 - (1.0 - userY)  * ramp;
+
         double currentMag = Math.sqrt(
                 mc().player.motionX * mc().player.motionX +
                         mc().player.motionZ * mc().player.motionZ);
 
-        double safeXzFactor = calcSafeFactor(expectedMag, toleranceXZ, userXZ, currentMag);
-        double safeYFactor  = calcSafeFactorY(Math.abs(sim.getExpectedY()), toleranceY, userY, Math.abs(mc().player.motionY));
+        double safeXzFactor = calcSafeFactor(expectedMag, toleranceXZ, effectiveUserXZ, currentMag, sim.getPastExternalVelocity());
+        double safeYFactor  = calcSafeFactorY(Math.abs(sim.getExpectedY()), toleranceY, effectiveUserY, Math.abs(mc().player.motionY), sim.getPastExternalVelocity());
 
         mc().player.motionX *= safeXzFactor;
         mc().player.motionY *= safeYFactor;
@@ -393,7 +399,8 @@ public class VelocityModule extends Module {
                     " reduced=" + String.format("%.4f", reducedMove) +
                     " kb=" + String.format("%.0f%%", kbPercent) +
                     " exp=" + String.format("%.4f", expectedMag) +
-                    " tol=" + String.format("%.3f", toleranceXZ));
+                    " tol=" + String.format("%.3f", toleranceXZ) +
+                    " ramp=" + String.format("%.2f", ramp));
         }
 
         reduceCounter--;
@@ -412,19 +419,32 @@ public class VelocityModule extends Module {
         }
     }
 
-    private double calcSafeFactor(double expectedMag, double tolerance, double userFactor, double currentMag) {
+    /**
+     * Вычисляет безопасный фактор снижения XZ с динамическим буфером.
+     * Ранние тики (малый pev): буфер 0.70 — очень консервативно.
+     * Поздние тики (pev>=8):  буфер 0.90 — стандартно.
+     */
+    private double calcSafeFactor(double expectedMag, double tolerance, double userFactor,
+                                  double currentMag, int pev) {
         if (expectedMag < 0.001 || currentMag < 0.001) return userFactor;
+        // safetyBuffer нарастает от 0.70 до 0.90 по мере роста pev
+        double safetyBuffer = 0.70 + 0.20 * Math.min(pev / 8.0, 1.0);
         double deviation = expectedMag * (1.0 - userFactor);
-        if (deviation <= tolerance * 0.9) return userFactor;
-        double minFactor = 1.0 - (tolerance * 0.9 / expectedMag);
+        if (deviation <= tolerance * safetyBuffer) return userFactor;
+        double minFactor = 1.0 - (tolerance * safetyBuffer / expectedMag);
         return Math.min(1.0, Math.max(minFactor, userFactor));
     }
 
-    private double calcSafeFactorY(double expectedY, double toleranceY, double userFactor, double currentY) {
+    /**
+     * Вычисляет безопасный фактор снижения Y с динамическим буфером.
+     */
+    private double calcSafeFactorY(double expectedY, double toleranceY, double userFactor,
+                                   double currentY, int pev) {
         if (expectedY < 0.001 || currentY < 0.001) return userFactor;
+        double safetyBuffer = 0.70 + 0.20 * Math.min(pev / 8.0, 1.0);
         double deviationY = expectedY * (1.0 - userFactor);
-        if (deviationY <= toleranceY * 0.9) return userFactor;
-        double minFactorY = 1.0 - (toleranceY * 0.9 / expectedY);
+        if (deviationY <= toleranceY * safetyBuffer) return userFactor;
+        double minFactorY = 1.0 - (toleranceY * safetyBuffer / expectedY);
         return Math.min(1.0, Math.max(minFactorY, userFactor));
     }
 
