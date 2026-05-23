@@ -2,6 +2,7 @@ package com.yourname.backtrack.module.impl;
 
 import com.yourname.backtrack.client.ClientSimulator;
 import com.yourname.backtrack.client.MovementSimState;
+import com.yourname.backtrack.client.SimDebug;
 import com.yourname.backtrack.module.Category;
 import com.yourname.backtrack.module.Module;
 import com.yourname.backtrack.setting.Setting;
@@ -200,6 +201,7 @@ public class VelocityModule extends Module {
             reduceTotalRaw     = 0.0;
             reduceTotalReduced = 0.0;
             reduceWindowActual = 0;
+            ClientSimulator.INSTANCE.applyVelocity(vx, vy, vz);
             return false;
         }
 
@@ -305,6 +307,9 @@ public class VelocityModule extends Module {
     @Override
     public void onClientTick() {
         if (!isEnabled() || mc().player == null || mc().world == null) return;
+
+        SimDebug.enabled = debug.getValue();
+        SimDebug.logToChat = debug.getValue();
 
         if (!ClientSimulator.INSTANCE.isInVelocityWindow()) {
             velocityReceived = false;
@@ -840,6 +845,8 @@ public class VelocityModule extends Module {
         releaseJumpKey();
         stopReverseMovement();
         resetState();
+        SimDebug.enabled = false;
+        SimDebug.logToChat = false;
     }
 
     private void resetState() {
