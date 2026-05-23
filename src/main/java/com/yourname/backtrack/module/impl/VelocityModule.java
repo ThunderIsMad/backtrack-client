@@ -52,6 +52,7 @@ public class VelocityModule extends Module {
     // JumpReset
     private final BooleanSetting fallDamageCheck = new BooleanSetting("FallDamageCheck", true);
     private final BooleanSetting debug           = new BooleanSetting("Debug", false);
+    private final BooleanSetting simDebugLog     = new BooleanSetting("SimDebug", false);
     private final NumberSetting  chance          = new NumberSetting("Chance",          80,  1,   100, 1);
     private final NumberSetting  resetTicks      = new NumberSetting("ResetTicks",      3,   1,   8,   1);
     private final NumberSetting  cooldownTicks   = new NumberSetting("Cooldown",        14,  8,   25,  1);
@@ -130,7 +131,7 @@ public class VelocityModule extends Module {
         super("Velocity", Category.COMBAT, Keyboard.KEY_NONE);
         addSettings(new Setting[] { mode,
                 xzModify, yModify, ignoreExplosion,
-                fallDamageCheck, debug, chance, resetTicks, cooldownTicks,
+                fallDamageCheck, debug, simDebugLog, chance, resetTicks, cooldownTicks,
                 randomize, delayMin, delayMax, maxDistance,
                 jumpMotionVar, jumpVelWindow,
                 reverseChance, reverseWaitTicks, reverseMoveTicks,
@@ -302,14 +303,12 @@ public class VelocityModule extends Module {
 
     // ========================== Per-tick update ==========================
 
-    // Убрать import net.minecraftforge.client.event.InputUpdateEvent;
-
     @Override
     public void onClientTick() {
         if (!isEnabled() || mc().player == null || mc().world == null) return;
 
-        SimDebug.enabled = debug.getValue();
-        SimDebug.logToChat = debug.getValue();
+        SimDebug.enabled = simDebugLog.getValue();
+        SimDebug.logToChat = simDebugLog.getValue();
 
         if (!ClientSimulator.INSTANCE.isInVelocityWindow()) {
             velocityReceived = false;
@@ -364,7 +363,7 @@ public class VelocityModule extends Module {
 
     private void handleReduce() {
         if (reduceCounter <= 0) return;
-        if (ClientSimulator.INSTANCE.shadowMode) return; // don't touch motion in shadow mode
+        if (ClientSimulator.INSTANCE.shadowMode) return;
 
         if (!ClientSimulator.INSTANCE.isInVelocityWindow()) {
             reduceCounter = 0;
@@ -627,7 +626,6 @@ public class VelocityModule extends Module {
         double dy = Math.abs(mc().player.motionY - predictedY);
         double dz = Math.abs(mc().player.motionZ - predictedZ);
 
-        // Don't touch if already within tolerance
         if (dx < tolXZ && dz < tolXZ && dy < tolY) return;
 
         mc().player.motionX = predictedX;
@@ -762,11 +760,9 @@ public class VelocityModule extends Module {
     public void onAttack() {
         if (!isEnabled() || mc().player == null || mc().player.getLastAttackedEntity() == null) return;
 
-        // JumpReset guard
         if ("JumpReset".equals(mode.getValue()) && ClientSimulator.INSTANCE.isInVelocityWindow()) {
             return;
         }
-        // Reverse guard
         if ("Reverse".equals(mode.getValue()) && reverseState == ReverseState.CORRECTING) {
             return;
         }
@@ -786,10 +782,12 @@ public class VelocityModule extends Module {
                 filtered.add(yModify);
                 filtered.add(ignoreExplosion);
                 filtered.add(debug);
+                filtered.add(simDebugLog);
                 break;
             case "JumpReset":
                 filtered.add(fallDamageCheck);
                 filtered.add(debug);
+                filtered.add(simDebugLog);
                 filtered.add(chance);
                 filtered.add(resetTicks);
                 filtered.add(cooldownTicks);
@@ -816,20 +814,24 @@ public class VelocityModule extends Module {
                 filtered.add(pushEnd);
                 filtered.add(pushOnGround);
                 filtered.add(debug);
+                filtered.add(simDebugLog);
                 break;
             case "Legit":
                 filtered.add(legitStrafe);
                 filtered.add(debug);
+                filtered.add(simDebugLog);
                 break;
             case "TickZero":
                 filtered.add(tickZeroHurtTime);
                 filtered.add(debug);
+                filtered.add(simDebugLog);
                 break;
             case "Reduce":
                 filtered.add(reduceXZ);
                 filtered.add(reduceY);
                 filtered.add(reduceWindow);
                 filtered.add(debug);
+                filtered.add(simDebugLog);
                 break;
         }
         return filtered;
