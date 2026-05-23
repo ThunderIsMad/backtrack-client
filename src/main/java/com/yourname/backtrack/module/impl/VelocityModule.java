@@ -189,7 +189,9 @@ public class VelocityModule extends Module {
         } else if ("Reverse".equals(sel)) {
             handleReversePacket(vx, vy, vz);
         } else if ("Reduce".equals(sel)) {
-            reduceCounter = (int) reduceWindow.getValue();
+            // +1 grace tick: симулятор получает тик на синхронизацию tolerance
+            // перед тем как Reduce начнёт резать motion
+            reduceCounter = (int) reduceWindow.getValue() + 1;
             reduceTotalRaw     = 0.0;
             reduceTotalReduced = 0.0;
             reduceWindowActual = 0;
@@ -345,8 +347,21 @@ public class VelocityModule extends Module {
             return;
         }
 
-        int actualTick = (int) reduceWindow.getValue() - reduceCounter;
-        if (actualTick < 1) { reduceCounter--; return; }
+        // actualTick: реальный номер тика внутри окна (0-based до grace)
+        // reduceCounter стартует с window+1, поэтому grace тик — это когда actualTick==0
+        int actualTick = (int) reduceWindow.getValue() + 1 - reduceCounter;
+
+        // Фикс 1: пропускаем grace тик (actualTick==0) — симулятор синхронизирует tolerance
+        if (actualTick < 1) {
+            reduceCounter--;
+            return;
+        }
+
+        // Фикс 3: пропускаем первые 2 тика в воздухе — FLYING тег от Intave
+        if (actualTick < 3 && !mc().player.onGround) {
+            reduceCounter--;
+            return;
+        }
 
         ClientSimulator sim = ClientSimulator.INSTANCE;
         double expectedMag = sim.getExpectedMag();
