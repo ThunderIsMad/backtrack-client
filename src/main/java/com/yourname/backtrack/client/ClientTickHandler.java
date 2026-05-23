@@ -1,30 +1,32 @@
 package com.yourname.backtrack.client;
 
 import net.minecraft.client.Minecraft;
+import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
 
 public class ClientTickHandler {
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.HIGH)
     public void onClientTickStart(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.START) return;
         Minecraft mc = Minecraft.getMinecraft();
-        if (mc.player == null) return;
-
+        if (mc.player == null || mc.world == null) return;
         ClientSimulator sim = ClientSimulator.INSTANCE;
-        sim.captureInput(mc);
-        sim.simulate();
+        sim.beginTick();
+        sim.syncVerifiedFromPlayer(mc);
+        sim.predictFlyingPacketBeforeVelocity();
+        sim.simulate(); // internally calls inputCapture.capture()
     }
 
-    @SubscribeEvent
+    @SubscribeEvent(priority = EventPriority.HIGH)
     public void onClientTickEnd(TickEvent.ClientTickEvent event) {
         if (event.phase != TickEvent.Phase.END) return;
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.player == null) return;
-
         ClientSimulator sim = ClientSimulator.INSTANCE;
         sim.syncFromPlayer();
+        sim.advanceVerifiedFromPlayer(mc);
         sim.prepareNextTick();
     }
 }

@@ -27,9 +27,7 @@ public class AutoSprintModule extends Module {
 
     @Override
     public void onClientTick() {
-        if (!isEnabled()) return;
-
-        if (mc().player == null || mc().world == null) return;
+        if (!isEnabled() || mc().player == null || mc().world == null) return;
 
         if (hungerCheck.getValue() && mc().player.getFoodStats().getFoodLevel() <= 6) {
             mc().player.setSprinting(false);
@@ -37,8 +35,7 @@ public class AutoSprintModule extends Module {
         }
 
         if (mode.getValue().equals("Intave")) {
-            ClientSimulator sim = ClientSimulator.INSTANCE;
-            if (sim.s.pastExternalVelocity < postHurtTicks.getValue()) {
+            if (ClientSimulator.INSTANCE.getPastExternalVelocity() < postHurtTicks.getValue()) {
                 mc().player.setSprinting(false);
                 return;
             }

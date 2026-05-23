@@ -144,6 +144,10 @@ public class VelocityModule extends Module {
 
     // ========================== Packet handling ==========================
 
+    public boolean isModifyMode() {
+        return isEnabled() && "Modify".equals(mode.getValue());
+    }
+
     public boolean handleVelocityPacket(SPacketEntityVelocityAccessor pkt) {
         if (mc().player == null) return false;
 
@@ -182,6 +186,13 @@ public class VelocityModule extends Module {
                 pkt.setMotionY((int) (rawY * yFactor));
                 pkt.setMotionZ((int) (rawZ * xzFactor));
             }
+
+            ClientSimulator.INSTANCE.applyVelocity(
+                    pkt.getMotionX() / 8000.0,
+                    pkt.getMotionY() / 8000.0,
+                    pkt.getMotionZ() / 8000.0
+            );
+
         } else if ("Reverse".equals(sel)) {
             handleReversePacket(vx, vy, vz);
         } else if ("Reduce".equals(sel)) {
@@ -295,6 +306,13 @@ public class VelocityModule extends Module {
     public void onClientTick() {
         if (!isEnabled() || mc().player == null || mc().world == null) return;
 
+        if (!ClientSimulator.INSTANCE.isInVelocityWindow()) {
+            velocityReceived = false;
+            ticksSinceVelocity = 0;
+        } else if (velocityReceived) {
+            ticksSinceVelocity++;
+        }
+
         String sel = mode.getValue();
 
         if (cooldownTimer > 0) {
@@ -313,9 +331,6 @@ public class VelocityModule extends Module {
         }
         wasHurt = isHurt;
 
-        if (velocityReceived) {
-            ticksSinceVelocity++;
-        }
 
         boolean justLanded = prevMotionY < -0.01 && mc().player.onGround;
         prevMotionY = mc().player.motionY;
@@ -344,18 +359,20 @@ public class VelocityModule extends Module {
 
     private void handleReduce() {
         if (reduceCounter <= 0) return;
+        if (ClientSimulator.INSTANCE.shadowMode) return; // don't touch motion in shadow mode
 
-        int actualTick = (int) reduceWindow.getValue() - reduceCounter;
-        if (actualTick < 1) {
-            reduceCounter--;
+        if (!ClientSimulator.INSTANCE.isInVelocityWindow()) {
+            reduceCounter = 0;
             return;
         }
 
-        MovementSimState state = ClientSimulator.INSTANCE.s;
-        double expectedMag = Math.sqrt(
-                state.predictedMotionX * state.predictedMotionX +
-                        state.predictedMotionZ * state.predictedMotionZ);
-        double tolerance = state.toleranceXZ;
+        int actualTick = (int) reduceWindow.getValue() - reduceCounter;
+        if (actualTick < 1) { reduceCounter--; return; }
+
+        ClientSimulator sim = ClientSimulator.INSTANCE;
+        double expectedMag = sim.getExpectedMag();
+        double toleranceXZ = sim.getToleranceXZ();
+        double toleranceY  = sim.getToleranceY();
         double userXZ = reduceXZ.getValue() / 100.0;
         double userY  = reduceY.getValue()  / 100.0;
 
@@ -363,8 +380,8 @@ public class VelocityModule extends Module {
                 mc().player.motionX * mc().player.motionX +
                         mc().player.motionZ * mc().player.motionZ);
 
-        double safeXzFactor = calcSafeFactor(expectedMag, tolerance, userXZ, currentMag);
-        double safeYFactor  = calcSafeFactorY(Math.abs(state.predictedMotionY), state.toleranceY, userY, Math.abs(mc().player.motionY));
+        double safeXzFactor = calcSafeFactor(expectedMag, toleranceXZ, userXZ, currentMag);
+        double safeYFactor  = calcSafeFactorY(Math.abs(sim.getExpectedY()), toleranceY, userY, Math.abs(mc().player.motionY));
 
         mc().player.motionX *= safeXzFactor;
         mc().player.motionY *= safeYFactor;
@@ -383,12 +400,12 @@ public class VelocityModule extends Module {
                     " reduced=" + String.format("%.4f", reducedMove) +
                     " kb=" + String.format("%.0f%%", kbPercent) +
                     " exp=" + String.format("%.4f", expectedMag) +
-                    " tol=" + String.format("%.3f", state.toleranceXZ));
+                    " tol=" + String.format("%.3f", toleranceXZ));
         }
 
         reduceCounter--;
 
-        if (reduceCounter == 0 && reduceWindowActual > 0) {
+        if (reduceCounter == 0 && reduceWindowActual > 0 && debug.getValue()) {
             double saved = reduceTotalRaw - reduceTotalReduced;
             double pct = (reduceTotalRaw > 0.001) ? (reduceTotalReduced / reduceTotalRaw * 100.0) : 100.0;
             sendClientMessage("\u00a7aReduce \u00a77window done" +
@@ -421,6 +438,9 @@ public class VelocityModule extends Module {
     // ========================== JumpReset ==========================
 
     private void handleJumpReset(boolean justLanded) {
+
+        if (ClientSimulator.INSTANCE.isFlyingJumpExpected()) return;
+
         if (pendingJump && mc().player.onGround && isTargetingEnemyInComboRange()) {
             if (randomize.getValue()) {
                 delayCounter++;
@@ -441,7 +461,7 @@ public class VelocityModule extends Module {
         if (!justLanded) return;
         if (fallDamageCheck.getValue() && isFallDamage) return;
         if (ticksSinceHit < 1 || ticksSinceHit > (int) resetTicks.getValue()) return;
-        if (jumpVelWindow.getValue() && velocityReceived && ticksSinceVelocity <= 10) return;
+        if (jumpVelWindow.getValue() && ClientSimulator.INSTANCE.isInVelocityWindow()) return;
         if (!isTargetingEnemyInComboRange()) return;
         if (random.nextDouble() * 100 >= chance.getValue()) return;
 
@@ -570,7 +590,7 @@ public class VelocityModule extends Module {
             return;
         }
 
-        reverseTimer = Math.min((int) reverseWaitTicks.getValue(), 6);
+        reverseTimer = (int) reverseWaitTicks.getValue();
         reverseState = ReverseState.CORRECTING;
         ticksSinceCorrection = 0;
 
@@ -589,55 +609,21 @@ public class VelocityModule extends Module {
 
     private void applyMotionCorrection() {
         if (mc().player == null) return;
+        if (ClientSimulator.INSTANCE.shadowMode) return;
 
-        double predictedX, predictedZ;
+        ClientSimulator sim = ClientSimulator.INSTANCE;
+        double predictedX = sim.getExpectedX();
+        double predictedY = sim.getExpectedY();
+        double predictedZ = sim.getExpectedZ();
+        double tolXZ = sim.getToleranceXZ();
+        double tolY  = sim.getToleranceY();
 
-        if (useConservativeProfile) {
-            switch (ticksSinceCorrection) {
-                case 0:
-                    predictedX = reverseOriginalVelX * 0.33;
-                    predictedZ = reverseOriginalVelZ * 0.33;
-                    break;
-                case 1:
-                    predictedX = reverseOriginalVelX * 0.34;
-                    predictedZ = reverseOriginalVelZ * 0.34;
-                    break;
-                case 2:
-                    predictedX = reverseOriginalVelX * 0.36;
-                    predictedZ = reverseOriginalVelZ * 0.36;
-                    break;
-                default:
-                    double baseX = reverseOriginalVelX * 0.36;
-                    double baseZ = reverseOriginalVelZ * 0.36;
-                    int extraTicks = ticksSinceCorrection - 2;
-                    predictedX = baseX * Math.pow(0.91, extraTicks);
-                    predictedZ = baseZ * Math.pow(0.91, extraTicks);
-                    break;
-            }
-        } else {
-            if (ticksSinceCorrection == 0) {
-                predictedX = reverseOriginalVelX * 0.538;
-                predictedZ = reverseOriginalVelZ * 0.538;
-            } else {
-                predictedX = reverseOriginalVelX * 0.538 * Math.pow(0.91, ticksSinceCorrection);
-                predictedZ = reverseOriginalVelZ * 0.538 * Math.pow(0.91, ticksSinceCorrection);
-            }
-        }
+        double dx = Math.abs(mc().player.motionX - predictedX);
+        double dy = Math.abs(mc().player.motionY - predictedY);
+        double dz = Math.abs(mc().player.motionZ - predictedZ);
 
-        double H = Math.sqrt(predictedX * predictedX + predictedZ * predictedZ);
-        if (H < 0.06) {
-            predictedX = 0.0;
-            predictedZ = 0.0;
-        }
-
-        double predictedY = reverseOriginalVelY;
-        for (int i = 0; i < ticksSinceCorrection + 1; i++) {
-            predictedY = (predictedY - 0.08) * 0.98;
-        }
-
-        if (Math.abs(predictedX) < 0.003) predictedX = 0.0;
-        if (Math.abs(predictedY) < 0.003) predictedY = 0.0;
-        if (Math.abs(predictedZ) < 0.003) predictedZ = 0.0;
+        // Don't touch if already within tolerance
+        if (dx < tolXZ && dz < tolXZ && dy < tolY) return;
 
         mc().player.motionX = predictedX;
         mc().player.motionY = predictedY;
@@ -648,18 +634,11 @@ public class VelocityModule extends Module {
                     " x=" + String.format("%.4f", predictedX) +
                     " y=" + String.format("%.4f", predictedY) +
                     " z=" + String.format("%.4f", predictedZ) +
-                    " H=" + String.format("%.4f", H));
+                    " tolXZ=" + String.format("%.4f", tolXZ) +
+                    " tolY=" + String.format("%.4f", tolY));
         }
 
         ticksSinceCorrection++;
-
-        if (predictedX == 0.0 && predictedZ == 0.0 && predictedY == 0.0) {
-            reverseTimer = 0;
-            if (reverseDebug.getValue()) {
-                sendClientMessage("\u00a7dCorrection \u00a77converged at tick " + ticksSinceCorrection +
-                        (H < 0.06 ? " (cutoff)" : ""));
-            }
-        }
     }
 
     private void startPostCorrectionMovement() {
@@ -759,6 +738,7 @@ public class VelocityModule extends Module {
     private void handleLegit() {
         if (mc().player.hurtTime <= 0) return;
         if (!legitStrafe.getValue()) return;
+        if (ClientSimulator.INSTANCE.state().reduceTicks > 0) return;
         mc().player.motionX *= 0.6;
         mc().player.motionZ *= 0.6;
     }
@@ -775,25 +755,18 @@ public class VelocityModule extends Module {
     // ========================== On Attack ==========================
 
     public void onAttack() {
-        if (mc().player == null || mc().player.getLastAttackedEntity() == null) return;
+        if (!isEnabled() || mc().player == null || mc().player.getLastAttackedEntity() == null) return;
 
-        if ("JumpReset".equals(mode.getValue()) && jumpVelWindow.getValue()
-                && velocityReceived && ticksSinceVelocity <= 10) {
+        // JumpReset guard
+        if ("JumpReset".equals(mode.getValue()) && ClientSimulator.INSTANCE.isInVelocityWindow()) {
             return;
         }
+        // Reverse guard
         if ("Reverse".equals(mode.getValue()) && reverseState == ReverseState.CORRECTING) {
             return;
         }
-
-        if (mc().player.getLastAttackedEntity().hurtTime > 0 && mc().player.hurtTime > 0) {
-            mc().player.motionX *= 0.6;
-            mc().player.motionZ *= 0.6;
-            if (debug.getValue()) {
-                sendClientMessage("\u00a7dReduceOnAttack \u00a77motionX=" + String.format("%.3f", mc().player.motionX) +
-                        " motionZ=" + String.format("%.3f", mc().player.motionZ));
-            }
-        }
     }
+
 
     // ========================== Settings UI ==========================
 

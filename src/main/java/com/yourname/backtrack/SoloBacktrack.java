@@ -9,8 +9,11 @@ import com.yourname.backtrack.hud.HudSettings;
 import com.yourname.backtrack.util.IntaveChatLogger;
 import com.yourname.backtrack.input.KeybindHandler;
 import com.yourname.backtrack.module.ModuleManager;
-import net.minecraftforge.common.MinecraftForge;
+import com.yourname.backtrack.client.ClientSimulator;
 import com.yourname.backtrack.client.ClientTickHandler;
+import com.yourname.backtrack.client.SimDebug;
+import com.yourname.backtrack.client.SimLifecycle;
+import net.minecraftforge.common.MinecraftForge;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.common.event.FMLInitializationEvent;
 import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
@@ -67,5 +70,11 @@ public class SoloBacktrack {
         MinecraftForge.EVENT_BUS.register(new GuiOpener(moduleManager, configManager, hudSettings, guiTheme));
         MinecraftForge.EVENT_BUS.register(new IntaveChatLogger());
         MinecraftForge.EVENT_BUS.register(new ClientTickHandler());
+        MinecraftForge.EVENT_BUS.register(new SimLifecycle());
+
+        // Load simulator settings
+        ClientSimulator.INSTANCE.shadowMode = configManager.loadSimulatorShadow();
+        SimDebug.enabled = configManager.loadSimulatorDebug();
+        SimDebug.logToChat = configManager.loadSimulatorDebugChat();
     }
 }

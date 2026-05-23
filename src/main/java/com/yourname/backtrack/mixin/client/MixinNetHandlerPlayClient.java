@@ -34,19 +34,21 @@ public class MixinNetHandlerPlayClient {
         if (packet.getEntityID() != mc.player.getEntityId()) return;
 
         SoloBacktrack mod = SoloBacktrack.getInstance();
-        if (mod == null) return;
+        VelocityModule vm = mod != null ? mod.getModuleManager().getModule(VelocityModule.class) : null;
+        boolean modifyMode = vm != null && vm.isModifyMode();
 
-        VelocityModule vm = mod.getModuleManager().getModule(VelocityModule.class);
+        if (!modifyMode) {
+            ClientSimulator.INSTANCE.applyVelocity(
+                    packet.getMotionX() / 8000.0,
+                    packet.getMotionY() / 8000.0,
+                    packet.getMotionZ() / 8000.0);
+        }
+
+        if (mod == null) return;
         if (vm == null || !vm.isEnabled()) return;
 
-        ClientSimulator.INSTANCE.applyVelocity(
-                packet.getMotionX() / 8000.0,
-                packet.getMotionY() / 8000.0,
-                packet.getMotionZ() / 8000.0
-        );
-
         VelocityModule.SPacketEntityVelocityAccessor accessor =
-                (VelocityModule.SPacketEntityVelocityAccessor)(Object) packet;
+                (VelocityModule.SPacketEntityVelocityAccessor) (Object) packet;
 
         if (vm.handleVelocityPacket(accessor)) ci.cancel();
     }
@@ -55,19 +57,11 @@ public class MixinNetHandlerPlayClient {
     private void onHandleExplosion(SPacketExplosion packet, CallbackInfo ci) {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.player == null) return;
-
+        ClientSimulator.INSTANCE.applyExplosion(
+                packet.getMotionX(), packet.getMotionY(), packet.getMotionZ());
         SoloBacktrack mod = SoloBacktrack.getInstance();
         if (mod == null) return;
-
         VelocityModule vm = mod.getModuleManager().getModule(VelocityModule.class);
-        if (vm == null || !vm.isEnabled()) return;
-
-        ClientSimulator.INSTANCE.applyExplosion(
-                packet.getMotionX(),
-                packet.getMotionY(),
-                packet.getMotionZ()
-        );
-
-        vm.handleExplosion(packet);
+        if (vm != null && vm.isEnabled()) vm.handleExplosion(packet);
     }
 }

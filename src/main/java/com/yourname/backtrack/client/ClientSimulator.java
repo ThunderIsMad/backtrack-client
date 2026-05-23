@@ -1,105 +1,152 @@
 package com.yourname.backtrack.client;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.entity.EntityLivingBase;
 import net.minecraft.entity.SharedMonsterAttributes;
-import net.minecraft.util.math.MathHelper;
+import net.minecraft.entity.player.EntityPlayer;
+import net.minecraft.enchantment.EnchantmentHelper;
+import net.minecraft.init.Enchantments;
 
 public final class ClientSimulator {
-
     public static final ClientSimulator INSTANCE = new ClientSimulator();
-    public final MovementSimState s = new MovementSimState();
 
-    private static final double SLIPPERINESS_AIR  = 0.91;
-    private static final double GRAVITY           = 0.08;
-    private static final double Y_MULTIPLIER      = 0.98;
-    private static final int    RELINK_ITERATIONS = 3;
+    private final MovementSimState s = new MovementSimState();
+    private final VanillaPlayerCollider collider = new VanillaPlayerCollider();
+    private final MovementInputCapture inputCapture = new MovementInputCapture();
+    private final MovementPhysicsEngine physics = new MovementPhysicsEngine();
 
-    private final SimplePlayerCollider collider = new SimplePlayerCollider();
+    private static final double GRAVITY = 0.08, Y_MULT = 0.98, AIR_SLIP = 0.91;
+
+    /** When true, Velocity Reduce/Reverse do not modify player motion (debug/shadow). */
+    public boolean shadowMode = false;
 
     private ClientSimulator() {}
 
-    // ---------- PUBLIC API ----------
+    public MovementSimState state() { return s; }
+    public void reset() { s.reset(); }
 
-    public void captureInput(Minecraft mc) {
+    public void beginTick() { s.beginTick(); }
+
+    public void syncVerifiedFromPlayer(Minecraft mc) {
         if (mc.player == null) return;
-
-        s.forwardKey = mc.player.moveForward > 0 ? 1 : (mc.player.moveForward < 0 ? -1 : 0);
-        s.strafeKey  = mc.player.moveStrafing > 0 ? 1 : (mc.player.moveStrafing < 0 ? -1 : 0);
-        s.jumpKey    = mc.gameSettings.keyBindJump.isKeyDown();
-        s.sneakKey   = mc.player.isSneaking();
-        s.sprintKey  = mc.player.isSprinting();
-        s.rotationYaw = mc.player.rotationYaw;
-        s.onGround   = collider.isOnGround(s.verifiedX, s.verifiedY, s.verifiedZ, mc);
-        s.handActive = mc.player.isHandActive();
-
-        updateSprintAllowed(mc);
-        updateAttributes(mc);
-
-        float yawRad = s.rotationYaw * 0.017453292f;
-        s.yawSin = MathHelper.sin(yawRad);
-        s.yawCos = MathHelper.cos(yawRad);
+        s.playerPosX = mc.player.posX;
+        s.playerPosY = mc.player.posY;
+        s.playerPosZ = mc.player.posZ;
+        if (!s.positionInitialized) {
+            s.verifiedX = mc.player.posX;
+            s.verifiedY = mc.player.posY;
+            s.verifiedZ = mc.player.posZ;
+            s.lastX = s.verifiedX;
+            s.lastY = s.verifiedY;
+            s.lastZ = s.verifiedZ;
+            s.positionInitialized = true;
+            return;
+        }
+        double drift = Math.sqrt(sq(mc.player.posX - s.verifiedX) + sq(mc.player.posY - s.verifiedY)
+                + sq(mc.player.posZ - s.verifiedZ));
+        if (drift > 8.0 || (drift > 1.0 && s.isInVelocityWindow())) {
+            s.verifiedX = mc.player.posX;
+            s.verifiedY = mc.player.posY;
+            s.verifiedZ = mc.player.posZ;
+            s.physicsPacketRelinkFlyVL = 0;
+        }
     }
 
-    public void simulate() {
-        double simX = s.baseMotionX;
-        double simY = s.baseMotionY;
-        double simZ = s.baseMotionZ;
+    public void predictFlyingPacketBeforeVelocity() {
+        if (s.pastVelocity != 0) return;
+        double mx = s.baseMotionXBeforeVelocity * AIR_SLIP;
+        double my = (s.baseMotionYBeforeVelocity - GRAVITY) * Y_MULT;
+        double mz = s.baseMotionZBeforeVelocity * AIR_SLIP;
+        if (mx == 0 || my == 0 || mz == 0) return;
 
-        // Attack reduce
-        if (s.reduceTicks > 0) {
-            for (int i = 0; i < s.reduceTicks; i++) {
-                simX *= 0.6;
-                simZ *= 0.6;
-            }
-            if (Math.abs(simX) < s.resetMotion) simX = 0;
-            if (Math.abs(simZ) < s.resetMotion) simZ = 0;
-        }
-
-        double[] accelerated = applyInputAcceleration(simX, simY, simZ);
-
-        if (s.jumpKey && s.onGround) {
-            accelerated[1] = s.jumpMotion;
-            if (s.sprintKey) {
-                accelerated[0] -= s.yawSin * 0.2;
-                accelerated[2] += s.yawCos * 0.2;
-            }
-        }
-
-        double[] decayed = applyRelinkWithCollision(accelerated);
-
-        s.predictedMotionX = decayed[0];
-        s.predictedMotionY = decayed[1];
-        s.predictedMotionZ = decayed[2];
-
-        // Flying packet detection
-        double motionDist = decayed[0]*decayed[0] + decayed[1]*decayed[1] + decayed[2]*decayed[2];
-        if (motionDist < 0.0009) {
+        Minecraft mc = Minecraft.getMinecraft();
+        VanillaPlayerCollider.CollideResult r = collider.collide(mc, s.verifiedX, s.verifiedY, s.verifiedZ, mx, my, mz);
+        if ((r.onGround || s.onGround) && (r.motionX * r.motionX + r.motionY * r.motionY + r.motionZ * r.motionZ) < 0.009) {
+            s.physicsUnpredictableVelocityExpected = true;
             s.pastFlyingPacketAccurate = 0;
         }
     }
 
+    public void simulate() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.player == null) return;
+
+        inputCapture.capture(s, mc);
+        maybeSearchKeys(mc);
+        physics.simulate(s);
+        ToleranceCalculator.compute(s);
+        SimDebug.logTick(this);
+    }
+
+    private void maybeSearchKeys(Minecraft mc) {
+        double[] pred = physics.simulateOneTick(s, s.forwardKey, s.strafeKey);
+        double err = Math.sqrt(sq(pred[0] - mc.player.motionX) + sq(pred[2] - mc.player.motionZ));
+        ToleranceCalculator.compute(s);
+        boolean needSearch = err > Math.max(s.toleranceXZ * 2, 0.008)
+                || (s.pastVelocity > 0 && s.pastVelocity < 25);
+        if (!needSearch) return;
+
+        int[] search = InputKeySearcher.search(s, physics, mc.player.motionX, mc.player.motionZ);
+        if (search != null) {
+            s.forwardKey = search[0];
+            s.strafeKey = search[1];
+        }
+    }
+
+    public void recalculateAfterOutgoingPacket() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.player == null) return;
+        predictFlyingPacketBeforeVelocity();
+        inputCapture.capture(s, mc);
+        physics.simulate(s);
+        ToleranceCalculator.compute(s);
+    }
+
+    public void syncFromPlayer() {
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.player == null) return;
+        s.baseMotionX = mc.player.motionX;
+        s.baseMotionY = mc.player.motionY;
+        s.baseMotionZ = mc.player.motionZ;
+    }
+
+    public void advanceVerifiedFromPlayer(Minecraft mc) {
+        if (mc.player == null) return;
+        double dx = mc.player.posX - s.lastX;
+        double dy = mc.player.posY - s.lastY;
+        double dz = mc.player.posZ - s.lastZ;
+        if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) > 1e-6) {
+            s.verifiedX = mc.player.posX;
+            s.verifiedY = mc.player.posY;
+            s.verifiedZ = mc.player.posZ;
+        }
+        s.lastX = mc.player.posX;
+        s.lastY = mc.player.posY;
+        s.lastZ = mc.player.posZ;
+    }
+
     public void prepareNextTick() {
-        double slipperiness = s.onGround ? s.blockSlipperiness : SLIPPERINESS_AIR;
-
-        s.baseMotionX = s.predictedMotionX * slipperiness;
-        s.baseMotionY = s.onGround ? 0.0 : (s.predictedMotionY - GRAVITY) * Y_MULTIPLIER;
-        s.baseMotionZ = s.predictedMotionZ * slipperiness;
-
+        Minecraft mc = Minecraft.getMinecraft();
+        double slip = s.lastOnGround
+                ? MovementFriction.groundSlipperinessForDecay(mc, s.verifiedX, s.verifiedY, s.verifiedZ)
+                : AIR_SLIP;
+        s.baseMotionX *= slip;
+        s.baseMotionY = s.lastOnGround ? 0.0 : (s.baseMotionY - GRAVITY) * Y_MULT;
+        s.baseMotionZ *= slip;
         if (Math.abs(s.baseMotionX) < s.resetMotion) s.baseMotionX = 0;
         if (Math.abs(s.baseMotionY) < s.resetMotion) s.baseMotionY = 0;
         if (Math.abs(s.baseMotionZ) < s.resetMotion) s.baseMotionZ = 0;
-
-        s.lastX = s.verifiedX; s.lastY = s.verifiedY; s.lastZ = s.verifiedZ;
-        s.verifiedX += s.predictedMotionX;
-        s.verifiedY += s.predictedMotionY;
-        s.verifiedZ += s.predictedMotionZ;
-
+        if (s.inWater) {
+            s.baseMotionX *= 0.8;
+            s.baseMotionZ *= 0.8;
+        }
+        if (s.inWeb) {
+            s.baseMotionX = 0;
+            s.baseMotionY = 0;
+            s.baseMotionZ = 0;
+        }
         s.lastOnGround = s.onGround;
-        s.pastPlayerReduceAttackPhysics++;
-        if (s.pastPlayerReduceAttackPhysics > 100) s.pastPlayerReduceAttackPhysics = 100;
-        s.reduceTicks = 0;
-
-        predictFlyingPacketBeforeVelocity();
+        if (s.pastPlayerReduceAttackPhysics < 100) s.pastPlayerReduceAttackPhysics++;
         s.pastFlyingPacketAccurate++;
     }
 
@@ -107,29 +154,11 @@ public final class ClientSimulator {
         s.baseMotionXBeforeVelocity = s.baseMotionX;
         s.baseMotionYBeforeVelocity = s.baseMotionY;
         s.baseMotionZBeforeVelocity = s.baseMotionZ;
-        s.baseMotionX = vx; s.baseMotionY = vy; s.baseMotionZ = vz;
+        s.baseMotionX = vx;
+        s.baseMotionY = vy;
+        s.baseMotionZ = vz;
         s.pastExternalVelocity = 0;
         s.pastVelocity = 0;
-    }
-
-    public void handleTeleport(double x, double y, double z) {
-        s.verifiedX = x; s.verifiedY = y; s.verifiedZ = z;
-        s.lastX = x; s.lastY = y; s.lastZ = z;
-        s.baseMotionX = 0; s.baseMotionY = 0; s.baseMotionZ = 0;
-        s.predictedMotionX = 0; s.predictedMotionY = 0; s.predictedMotionZ = 0;
-        s.pastExternalVelocity = 100;
-        s.pastVelocity = 100;
-    }
-
-    public void onOutgoingMovement() {
-        s.pastExternalVelocity++;
-        s.pastVelocity++;
-        s.reduceTicks = 0;
-    }
-
-    public void onAttack() {
-        s.pastPlayerReduceAttackPhysics = 0;
-        if (s.reduceTicks < 3) s.reduceTicks++;
     }
 
     public void applyExplosion(double vx, double vy, double vz) {
@@ -138,129 +167,78 @@ public final class ClientSimulator {
         s.baseMotionZ += vz;
     }
 
-    public void syncFromPlayer() {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc.player != null) {
-            s.baseMotionX = mc.player.motionX;
-            s.baseMotionY = mc.player.motionY;
-            s.baseMotionZ = mc.player.motionZ;
+    public void handleTeleport(double x, double y, double z) {
+        s.verifiedX = x;
+        s.verifiedY = y;
+        s.verifiedZ = z;
+        s.lastX = x;
+        s.lastY = y;
+        s.lastZ = z;
+        s.baseMotionX = 0;
+        s.baseMotionY = 0;
+        s.baseMotionZ = 0;
+        s.predictedMotionX = 0;
+        s.predictedMotionY = 0;
+        s.predictedMotionZ = 0;
+        s.pastExternalVelocity = 100;
+        s.pastVelocity = 100;
+        s.reduceTicks = 0;
+        s.physicsPacketRelinkFlyVL = 0;
+        s.physicsUnpredictableVelocityExpected = false;
+    }
+
+    public void onOutgoingMovement(boolean posChanged, double x, double y, double z) {
+        if (posChanged) {
+            s.verifiedX = x;
+            s.verifiedY = y;
+            s.verifiedZ = z;
+            s.positionInitialized = true;
         }
+        s.pastExternalVelocity++;
+        s.pastVelocity++;
+        s.reduceTicks = 0;
     }
 
-    // ---------- GETTERS ----------
+    public void onAttack(EntityPlayer player, EntityLivingBase target) {
+        if (player == null || target == null) return;
+        if (!(target instanceof EntityPlayer)) return;
 
-    public double getExpectedX()  { return s.predictedMotionX; }
-    public double getExpectedY()  { return s.predictedMotionY; }
-    public double getExpectedZ()  { return s.predictedMotionZ; }
-    public double getExpectedMag() {
-        double ex = s.predictedMotionX, ez = s.predictedMotionZ;
-        return Math.sqrt(ex * ex + ez * ez);
-    }
-    public double getToleranceXZ() { computeTolerances(); return s.toleranceXZ; }
-    public double getToleranceY()  { computeTolerances(); return s.toleranceY; }
-    public int getPastExternalVelocity() { return s.pastExternalVelocity; }
-    public int getPastVelocity()         { return s.pastVelocity; }
-    public boolean isInVelocityWindow()  { return s.pastExternalVelocity < 10; }
+        boolean sprint = player.isSprinting();
+        int kbLevel = EnchantmentHelper.getEnchantmentLevel(Enchantments.KNOCKBACK, player.getHeldItemMainhand());
+        double attackDamage = player.getEntityAttribute(SharedMonsterAttributes.ATTACK_DAMAGE).getAttributeValue();
+        boolean hasWeaponDamage = attackDamage > 0.0;
 
-    // ---------- INTERNALS ----------
-
-    private void updateSprintAllowed(Minecraft mc) {
-        s.sprintingAllowed = !s.sneakKey
-                && mc.player.getFoodStats().getFoodLevel() > 6
-                && mc.currentScreen == null;
-    }
-
-    private void updateAttributes(Minecraft mc) {
-        s.aiMoveSpeed = (float) mc.player.getEntityAttribute(SharedMonsterAttributes.MOVEMENT_SPEED).getAttributeValue();
-        s.jumpMotion = 0.42f;
-    }
-
-    private double[] applyInputAcceleration(double mx, double my, double mz) {
-        float forward = s.forwardKey * 0.98f;
-        float strafe  = s.strafeKey * 0.98f;
-
-        if (s.sneakKey) { forward *= 0.3f; strafe *= 0.3f; }
-        if (s.handActive) { forward *= 0.2f; strafe *= 0.2f; }
-
-        float friction = s.onGround ? s.blockSlipperiness : (float)SLIPPERINESS_AIR;
-        float f = strafe * strafe + forward * forward;
-        if (f >= 0.0001f) {
-            f = friction / Math.max(1.0f, (float) Math.sqrt(f));
-            strafe  *= f;
-            forward *= f;
-            mx += strafe * s.yawCos - forward * s.yawSin;
-            mz += forward * s.yawCos + strafe * s.yawSin;
-        }
-
-        return new double[]{mx, my, mz};
-    }
-
-    private double[] applyRelinkWithCollision(double[] motion) {
-        double mx = motion[0], my = motion[1], mz = motion[2];
-        double posX = s.verifiedX, posY = s.verifiedY, posZ = s.verifiedZ;
-        Minecraft mc = Minecraft.getMinecraft();
-
-        for (int i = 0; i < RELINK_ITERATIONS; i++) {
-            mx *= SLIPPERINESS_AIR;
-            my = (my - GRAVITY) * Y_MULTIPLIER;
-            mz *= SLIPPERINESS_AIR;
-
-            if (Math.abs(mx) < s.resetMotion) mx = 0;
-            if (Math.abs(my) < s.resetMotion) my = 0;
-            if (Math.abs(mz) < s.resetMotion) mz = 0;
-
-            boolean[] flags = new boolean[2];
-            double[] resolved = collider.collide(posX, posY, posZ, mx, my, mz, flags);
-            mx = resolved[0]; my = resolved[1]; mz = resolved[2];
-
-            posX += mx; posY += my; posZ += mz;
-
-            if (flags[1] && my <= 0) {
-                s.onGround = true;
-                s.collidedVertically = true;
-                if (my < 0) my = 0;
-            } else {
-                s.collidedVertically = false;
+        if (hasWeaponDamage && (sprint || kbLevel > 0)) {
+            s.pastPlayerReduceAttackPhysics = 0;
+            boolean limitedToOneAttack = kbLevel == 0;
+            if (s.reduceTicks == 0 || !limitedToOneAttack) {
+                if (s.reduceTicks < 3) s.reduceTicks++;
             }
-            s.collidedHorizontally = flags[0];
-        }
-
-        return new double[]{mx, my, mz};
-    }
-
-    private void predictFlyingPacketBeforeVelocity() {
-        if (s.pastVelocity != 0) return;
-        double mx = s.baseMotionXBeforeVelocity * 0.91;
-        double my = (s.baseMotionYBeforeVelocity - 0.08) * 0.98;
-        double mz = s.baseMotionZBeforeVelocity * 0.91;
-        double dist = mx*mx + my*my + mz*mz;
-        if (s.onGround && dist < 0.009) {
-            s.physicsUnpredictableVelocityExpected = true;
-            s.pastFlyingPacketAccurate = 0;
         }
     }
 
-    private void computeTolerances() {
-        double xz = 0.0007;
-        double y  = 0.00001;
+    public boolean isInVelocityWindow() { return s.isInVelocityWindow(); }
 
-        if (s.pastPlayerReduceAttackPhysics <= 1) {
-            xz = s.pastFlyingPacketAccurate <= 2 ? 0.03 : 0.015;
-        }
-
-        if (s.pastExternalVelocity == 0) {
-            xz = 0.005; y = 0.005;
-        } else if (s.pastExternalVelocity < 10) {
-            xz = Math.max(xz, 0.015);
-            y  = Math.max(y, 0.005);
-        }
-
-        if (s.collidedHorizontally) xz = Math.max(xz, 0.027);
-        if (s.physicsUnpredictableVelocityExpected) xz = Math.max(xz, 0.1);
-
-        s.toleranceXZ = xz;
-        s.toleranceY  = y;
+    public boolean isFlyingJumpExpected() {
+        double px = s.predictedMotionX, py = s.predictedMotionY, pz = s.predictedMotionZ;
+        if (Math.abs(px) >= 0.1 || Math.abs(pz) >= 0.1) return false;
+        if (Math.abs(py - s.jumpMotion) >= 0.05) return false;
+        if (!s.onGround && !s.lastOnGround) return false;
+        Minecraft mc = Minecraft.getMinecraft();
+        if (mc.player == null) return false;
+        double diffY = py - mc.player.motionY;
+        return diffY > 0.01 && diffY < 0.03;
     }
 
-    public void reset() { s.reset(); }
+    public double getExpectedX() { return s.predictedMotionX; }
+    public double getExpectedY() { return s.predictedMotionY; }
+    public double getExpectedZ() { return s.predictedMotionZ; }
+    public double getExpectedMag() {
+        return Math.sqrt(s.predictedMotionX * s.predictedMotionX + s.predictedMotionZ * s.predictedMotionZ);
+    }
+    public double getToleranceXZ() { ToleranceCalculator.compute(s); return s.toleranceXZ; }
+    public double getToleranceY() { ToleranceCalculator.compute(s); return s.toleranceY; }
+    public int getPastExternalVelocity() { return s.pastExternalVelocity; }
+
+    private double sq(double v) { return v * v; }
 }

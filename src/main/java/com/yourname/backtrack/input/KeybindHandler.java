@@ -3,6 +3,8 @@ package com.yourname.backtrack.input;
 import com.yourname.backtrack.config.ConfigManager;
 import com.yourname.backtrack.module.Module;
 import com.yourname.backtrack.module.ModuleManager;
+import net.minecraft.client.Minecraft;
+import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.InputEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
@@ -16,6 +18,13 @@ public class KeybindHandler {
     public KeybindHandler(ModuleManager moduleManager, ConfigManager configManager) {
         this.moduleManager = moduleManager;
         this.configManager = configManager;
+    }
+
+    @SubscribeEvent(priority = EventPriority.NORMAL)
+    public void onClientTick(TickEvent.ClientTickEvent event) {
+        if (event.phase == TickEvent.Phase.START) {
+            moduleManager.onTick();
+        }
     }
 
     @SubscribeEvent
@@ -33,6 +42,7 @@ public class KeybindHandler {
         }
     }
 
+    /** Called from ModuleManager.onTick() for polling-based keybinds */
     public void onTick() {
         for (Module module : moduleManager.getModules()) {
             if (module.getKeyBinding().isPressed()) {
@@ -40,13 +50,6 @@ public class KeybindHandler {
                 configManager.saveModuleStates(moduleManager);
                 break;
             }
-        }
-    }
-
-    @SubscribeEvent
-    public void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase == TickEvent.Phase.START) {
-            moduleManager.onTick();
         }
     }
 }

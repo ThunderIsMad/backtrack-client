@@ -20,11 +20,6 @@ public class ConfigManager {
     private Properties cachedProperties = null;
 
     public ConfigManager() {
-        // Launch.minecraftHome is set by LaunchWrapper before any mod code runs.
-        // It is a plain Java field on a non-obfuscated class, so it resolves
-        // identically in both the dev workspace and the production obfuscated jar.
-        // This avoids calling Minecraft.getMinecraft().mcDataDir, whose MCP field
-        // name (mcDataDir / field_71412_aA) is unreliable at postInit time.
         File configDir = new File(Launch.minecraftHome, "backtrack");
         if (!configDir.exists()) {
             configDir.mkdirs();
@@ -33,15 +28,12 @@ public class ConfigManager {
     }
 
     // --- GUI position ---
-
     public int loadGuiX() {
         return parseInt(loadProperties().getProperty("gui.x"), 20);
     }
-
     public int loadGuiY() {
         return parseInt(loadProperties().getProperty("gui.y"), 20);
     }
-
     public void saveGuiPosition(int x, int y) {
         Properties p = loadProperties();
         p.setProperty("gui.x", String.valueOf(x));
@@ -49,8 +41,18 @@ public class ConfigManager {
         saveProperties(p);
     }
 
-    // --- HUD settings ---
+    // --- Simulator settings ---
+    public boolean loadSimulatorShadow() {
+        return parseBoolean(loadProperties().getProperty("simulator.shadow"), false);
+    }
+    public boolean loadSimulatorDebug() {
+        return parseBoolean(loadProperties().getProperty("simulator.debug"), false);
+    }
+    public boolean loadSimulatorDebugChat() {
+        return parseBoolean(loadProperties().getProperty("simulator.debugChat"), false);
+    }
 
+    // --- HUD settings ---
     public void saveHudSettings(HudSettings hudSettings) {
         Properties p = loadProperties();
         p.setProperty("hud.x", String.valueOf(hudSettings.getX()));
@@ -64,7 +66,6 @@ public class ConfigManager {
         p.setProperty("hud.textMode", String.valueOf(hudSettings.getTextMode()));
         saveProperties(p);
     }
-
     public void loadHudSettings(HudSettings hudSettings) {
         Properties p = loadProperties();
         hudSettings.setX(parseInt(p.getProperty("hud.x"), 5));
@@ -79,7 +80,6 @@ public class ConfigManager {
     }
 
     // --- Module states ---
-
     public void saveModuleStates(ModuleManager mm) {
         Properties p = loadProperties();
         for (Module module : mm.getModules()) {
@@ -89,7 +89,6 @@ public class ConfigManager {
         }
         saveProperties(p);
     }
-
     public void loadModuleStates(ModuleManager mm) {
         Properties p = loadProperties();
         for (Module module : mm.getModules()) {
@@ -99,7 +98,6 @@ public class ConfigManager {
     }
 
     // --- Module keybinds ---
-
     public void loadModuleKeybinds(ModuleManager mm) {
         Properties p = loadProperties();
         for (Module module : mm.getModules()) {
@@ -109,7 +107,6 @@ public class ConfigManager {
     }
 
     // --- Module settings ---
-
     public void saveModuleSettings(ModuleManager mm) {
         Properties p = loadProperties();
         for (Module module : mm.getModules()) {
@@ -127,7 +124,6 @@ public class ConfigManager {
         }
         saveProperties(p);
     }
-
     public void loadModuleSettings(ModuleManager mm) {
         Properties p = loadProperties();
         for (Module module : mm.getModules()) {
@@ -136,25 +132,20 @@ public class ConfigManager {
                 String key = "module." + name + ".setting." + setting.getName();
                 if (setting instanceof BooleanSetting) {
                     ((BooleanSetting) setting).setValue(
-                            parseBoolean(p.getProperty(key), ((BooleanSetting) setting).getValue())
-                    );
+                            parseBoolean(p.getProperty(key), ((BooleanSetting) setting).getValue()));
                 } else if (setting instanceof NumberSetting) {
                     ((NumberSetting) setting).setValue(
-                            parseDouble(p.getProperty(key), ((NumberSetting) setting).getValue())
-                    );
+                            parseDouble(p.getProperty(key), ((NumberSetting) setting).getValue()));
                 } else if (setting instanceof ModeSetting) {
                     String val = p.getProperty(key);
                     ModeSetting ms = (ModeSetting) setting;
-                    if (val != null && ms.getModes().contains(val)) {
-                        ms.setValue(val);
-                    }
+                    if (val != null && ms.getModes().contains(val)) ms.setValue(val);
                 }
             }
         }
     }
 
     // --- Module HUD settings ---
-
     public void saveModuleHudSettings(ModuleManager mm) {
         Properties p = loadProperties();
         for (Module module : mm.getModules()) {
@@ -170,7 +161,6 @@ public class ConfigManager {
         }
         saveProperties(p);
     }
-
     public void loadModuleHudSettings(ModuleManager mm) {
         Properties p = loadProperties();
         for (Module module : mm.getModules()) {
@@ -187,7 +177,6 @@ public class ConfigManager {
     }
 
     // --- saveAll / loadAll ---
-
     public void saveAll(ModuleManager mm, HudSettings hudSettings, GuiTheme theme, int guiX, int guiY) {
         Properties p = loadProperties();
         p.setProperty("gui.x", String.valueOf(guiX));
@@ -195,18 +184,15 @@ public class ConfigManager {
         p.setProperty("gui.theme.accent", String.valueOf(theme.getAccentIndex()));
         p.setProperty("gui.theme.background", String.valueOf(theme.getBackgroundIndex()));
         saveProperties(p);
-
         saveHudSettings(hudSettings);
         saveModuleStates(mm);
         saveModuleSettings(mm);
         saveModuleHudSettings(mm);
     }
-
     public void loadAll(ModuleManager mm, HudSettings hudSettings, GuiTheme theme) {
         Properties p = loadProperties();
         theme.setAccentIndex(parseInt(p.getProperty("gui.theme.accent"), 0));
         theme.setBackgroundIndex(parseInt(p.getProperty("gui.theme.background"), 0));
-
         loadHudSettings(hudSettings);
         loadModuleStates(mm);
         loadModuleKeybinds(mm);
@@ -215,7 +201,6 @@ public class ConfigManager {
     }
 
     // --- Internal helpers ---
-
     private Properties loadProperties() {
         if (cachedProperties != null) return cachedProperties;
         Properties p = new Properties();
@@ -229,7 +214,6 @@ public class ConfigManager {
         cachedProperties = p;
         return p;
     }
-
     private void saveProperties(Properties p) {
         try (OutputStream out = new FileOutputStream(file)) {
             p.store(out, "Backtrack config");
@@ -238,18 +222,15 @@ public class ConfigManager {
             System.err.println("[ConfigManager] Failed to save config: " + e.getMessage());
         }
     }
-
     private int parseInt(String value, int defaultValue) {
         if (value == null) return defaultValue;
         try { return Integer.parseInt(value.trim()); }
         catch (NumberFormatException e) { return defaultValue; }
     }
-
     private boolean parseBoolean(String value, boolean defaultValue) {
         if (value == null) return defaultValue;
         return Boolean.parseBoolean(value.trim());
     }
-
     private double parseDouble(String value, double defaultValue) {
         if (value == null) return defaultValue;
         try { return Double.parseDouble(value.trim()); }
