@@ -101,8 +101,6 @@ public class VelocityModule extends Module {
     private boolean pendingJump    = false;
     private boolean jumpKeyHeld    = false;
 
-    private boolean velocityReceived = false;
-
     // Reduce state
     private int    reduceCounter = 0;
     private double reduceTotalRaw     = 0.0;
@@ -159,12 +157,10 @@ public class VelocityModule extends Module {
 
         isFallDamage = (rawX == 0 && rawZ == 0 && rawY < 0);
 
-        velocityReceived = true;
-
         String sel = mode.getValue();
 
         if (debug.getValue()) {
-            sendClientMessage("§eVel vx=" + String.format("%.3f", vx) +
+            sendClientMessage("§e" + "Vel vx=" + String.format("%.3f", vx) +
                     " vy=" + String.format("%.3f", vy) +
                     " vz=" + String.format("%.3f", vz) +
                     " fall=" + isFallDamage);
@@ -296,10 +292,6 @@ public class VelocityModule extends Module {
 
         SimDebug.enabled = simDebugLog.getValue();
         SimDebug.logToChat = simDebugLog.getValue();
-
-        if (!ClientSimulator.INSTANCE.isInVelocityWindow()) {
-            velocityReceived = false;
-        }
 
         String sel = mode.getValue();
 
@@ -643,26 +635,24 @@ public class VelocityModule extends Module {
 
         if (strafeRoll < strafeChance * 0.33) {
             KeyBinding.setKeyBindState(mc().gameSettings.keyBindForward.getKeyCode(), false);
-            if (random.nextBoolean()) {
-                KeyBinding.setKeyBindState(mc().gameSettings.keyBindLeft.getKeyCode(), true);
-                reverseStrafeLeft = true;
-            } else {
-                KeyBinding.setKeyBindState(mc().gameSettings.keyBindRight.getKeyCode(), true);
-                reverseStrafeLeft = false;
-            }
+            applyStrafeKey();
         } else if (strafeRoll < strafeChance) {
-            if (random.nextBoolean()) {
-                KeyBinding.setKeyBindState(mc().gameSettings.keyBindLeft.getKeyCode(), true);
-                reverseStrafeLeft = true;
-            } else {
-                KeyBinding.setKeyBindState(mc().gameSettings.keyBindRight.getKeyCode(), true);
-                reverseStrafeLeft = false;
-            }
+            applyStrafeKey();
         }
 
         if (reverseDebug.getValue()) {
             sendClientMessage("§dReverse §7moving forward " + reverseTimer + " ticks, strafe=" +
                     (reverseStrafeLeft ? "left" : (mc().gameSettings.keyBindRight.isKeyDown() ? "right" : "none")));
+        }
+    }
+
+    private void applyStrafeKey() {
+        if (random.nextBoolean()) {
+            KeyBinding.setKeyBindState(mc().gameSettings.keyBindLeft.getKeyCode(), true);
+            reverseStrafeLeft = true;
+        } else {
+            KeyBinding.setKeyBindState(mc().gameSettings.keyBindRight.getKeyCode(), true);
+            reverseStrafeLeft = false;
         }
     }
 
@@ -743,11 +733,7 @@ public class VelocityModule extends Module {
         if ("JumpReset".equals(mode.getValue()) && ClientSimulator.INSTANCE.isInVelocityWindow()) {
             return;
         }
-        if ("Reverse".equals(mode.getValue()) && reverseState == ReverseState.CORRECTING) {
-            return;
-        }
     }
-
 
     // ========================== Settings UI ==========================
 
@@ -840,7 +826,6 @@ public class VelocityModule extends Module {
         pendingJump             = false;
         delayCounter            = 0;
         currentDelay            = 0;
-        velocityReceived        = false;
         reduceCounter           = 0;
         reverseState            = ReverseState.IDLE;
         reverseTimer            = 0;
