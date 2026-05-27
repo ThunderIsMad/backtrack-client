@@ -1,0 +1,13 @@
+{
+  "required": true,
+  "package": "com.yourname.backtrack.mixin.client",
+  "compatibilityLevel": "JAVA_8",
+  "refmap": "mixins.backtrack.refmap.json",
+  "client": [
+    "MixinNetHandlerPlayClient",
+    "MixinPlayerControllerMP",
+    "MixinSPacketEntityVelocity",
+    "MixinSPacketExplosion",
+    "MixinNetworkManagerSend"
+  ]
+}

@@ -3,7 +3,7 @@ package com.yourname.backtrack.client;
 /**
  * Lightweight key-search: when client forward/strafe are unreliable
  * (modules overriding keys, lag), test alternatives and pick the
- * combination whose predicted motion minimises distance to actual motion.
+ * combination whose predicted motion minimizes distance to actual motion.
  */
 public final class InputKeySearcher {
 

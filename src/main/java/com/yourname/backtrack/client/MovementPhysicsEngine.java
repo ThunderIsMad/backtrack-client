@@ -49,6 +49,7 @@ public final class MovementPhysicsEngine {
             s.predictedMotionX += s.entityPushX;
             s.predictedMotionZ += s.entityPushZ;
         }
+        s.reduceTicks = 0;
     }
 
     private void simulateWater(Minecraft mc, MovementSimState s, double mx, double my, double mz) {
@@ -134,7 +135,9 @@ public final class MovementPhysicsEngine {
         }
 
         double posX = s.verifiedX, posY = s.verifiedY, posZ = s.verifiedZ;
-        double slip = MovementFriction.groundSlipperinessForDecay(mc, posX, posY, posZ);
+        double slip = s.lastOnGround
+                ? MovementFriction.groundSlipperinessForDecay(mc, posX, posY, posZ)
+                : AIR_SLIP;
         double inputMy = my;
 
         for (int i = 0; i <= MAX_RELINK; i++) {

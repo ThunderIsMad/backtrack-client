@@ -73,7 +73,6 @@ public final class ClientSimulator {
     /**
      * Scans nearby EntityPlayer instances and accumulates the vanilla applyEntityCollision
      * push into s.entityPushX / s.entityPushZ.  Called once per tick before simulate().
-     *
      * Vanilla logic (EntityLivingBase.collideWithNearbyEntities):
      *   For each other player whose AABB intersects ours (expanded by 0.2 on XZ):
      *     dx = other.posX - self.posX
@@ -175,6 +174,10 @@ public final class ClientSimulator {
         s.lastZ = mc.player.posZ;
     }
 
+    public void updateOnGround(Minecraft mc) {
+        s.onGround = collider.isOnGround(mc, s.verifiedX, s.verifiedY, s.verifiedZ);
+    }
+
     public void prepareNextTick() {
         Minecraft mc = Minecraft.getMinecraft();
         double slip = s.lastOnGround
@@ -209,6 +212,7 @@ public final class ClientSimulator {
         s.baseMotionZ = vz;
         s.pastExternalVelocity = 0;
         s.pastVelocity = 0;
+        s.reduceTicks = 0;
     }
 
     public void applyExplosion(double vx, double vy, double vz) {

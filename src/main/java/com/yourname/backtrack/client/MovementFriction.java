@@ -4,6 +4,8 @@ import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.SharedMonsterAttributes;
 import net.minecraft.init.Blocks;
+import net.minecraft.init.MobEffects;
+import net.minecraft.potion.PotionEffect;
 import net.minecraft.util.math.BlockPos;
 import net.minecraft.world.World;
 
@@ -15,7 +17,7 @@ public final class MovementFriction {
     /**
      * Returns the slipperiness of the block below the player's feet,
      * multiplied by the air slipperiness constant (0.91) for consistency
-     * with vanilla Minecraft physics.
+     * with vanilla Minecraft physics — matching Intave's currentSlipperiness().
      */
     public static float blockSlipperiness(World world, BlockPos below) {
         if (world == null || below == null) return 0.6f * 0.91f;
@@ -24,12 +26,6 @@ public final class MovementFriction {
         if (block == Blocks.SOUL_SAND) return 0.4f * 0.91f;
         if (block == Blocks.ICE || block == Blocks.PACKED_ICE) return 0.98f * 0.91f;
         return block.slipperiness * 0.91f;
-    }
-
-    public static float resolveFriction(Minecraft mc, boolean lastOnGround, boolean sprintingAllowed) {
-        if (mc.player == null) return 0.02f;
-        return resolveFrictionAt(mc, lastOnGround, sprintingAllowed,
-                mc.player.posX, mc.player.posY, mc.player.posZ);
     }
 
     public static float resolveFrictionAt(Minecraft mc, boolean lastOnGround, boolean sprintingAllowed,
@@ -54,11 +50,6 @@ public final class MovementFriction {
         return jumpFactor;
     }
 
-    public static float groundSlipperinessForDecay(Minecraft mc) {
-        if (mc.player == null) return 0.91f;
-        return groundSlipperinessForDecay(mc, mc.player.posX, mc.player.posY, mc.player.posZ);
-    }
-
     public static float groundSlipperinessForDecay(Minecraft mc, double posX, double posY, double posZ) {
         if (mc.player == null || mc.world == null) return 0.91f;
         BlockPos below = new BlockPos(posX, posY - 1.0, posZ);
@@ -68,9 +59,10 @@ public final class MovementFriction {
     public static float jumpMotion(Minecraft mc) {
         if (mc.player == null) return 0.42f;
         float jump = 0.42f;
-        if (mc.player.isPotionActive(net.minecraft.init.MobEffects.JUMP_BOOST)) {
-            int amp = mc.player.getActivePotionEffect(net.minecraft.init.MobEffects.JUMP_BOOST).getAmplifier();
-            jump += (amp + 1) * 0.1f;
+        PotionEffect jumpEffect = mc.player.getActivePotionEffect(MobEffects.JUMP_BOOST);
+        if (jumpEffect != null) {
+            int amp = jumpEffect.getAmplifier() + 1;
+            jump += amp * 0.1f;
         }
         return jump;
     }

@@ -1,5 +1,6 @@
 package com.yourname.backtrack.client;
 
+@SuppressWarnings("all")
 public final class ToleranceCalculator {
     private ToleranceCalculator() {}
 
@@ -15,42 +16,50 @@ public final class ToleranceCalculator {
             xz = 0.005;
             y = 0.005;
         } else if (s.pastExternalVelocity < 10) {
-            xz = Math.max(xz, 0.015);
-            y = Math.max(y, 0.005);
-            if (s.pastExternalVelocity >= 1 && s.pastExternalVelocity < 10) {
-                xz = Math.max(xz, 0.03);
-                y = Math.max(y, 0.01);
-            }
+            xz = 0.03;
+            y = 0.01;
         }
 
         if (s.receivedFlyingPacketIn(1) && s.pastExternalVelocity <= 4) {
-            y = Math.max(y, 0.03);
+            if (y < 0.03) y = 0.03;
         }
 
-        if (s.collidedHorizontally) xz = Math.max(xz, 0.027);
+        if (s.collidedHorizontally) {
+            if (xz < 0.027) xz = 0.027;
+        }
 
         if (s.physicsUnpredictableVelocityExpected) {
-            xz = Math.max(xz, 0.1);
-            y = Math.max(y, 0.05);
+            if (xz < 0.1) xz = 0.1;
+            if (y < 0.05) y = 0.05;
         }
 
         if (s.receivedFlyingPacketIn(2) && s.onGround
                 && Math.abs(s.lastMotionX) < 0.05 && Math.abs(s.lastMotionZ) < 0.05) {
-            xz = Math.max(xz, 0.03);
+            if (xz < 0.03) xz = 0.03;
         }
 
         double horizPred = Math.sqrt(s.predictedMotionX * s.predictedMotionX + s.predictedMotionZ * s.predictedMotionZ);
         int allowedRelink = horizPred < 0.03 ? 3 : 1;
         if (s.physicsPacketRelinkFlyVL > allowedRelink) {
-            xz = Math.max(xz, 0.02);
-            y = Math.max(y, 0.005);
+            if (xz < 0.02) xz = 0.02;
+            if (y < 0.005) y = 0.005;
         }
 
-        if (s.inWater || s.inLava) y = Math.max(y, 0.02);
-        if (s.pastWaterMovement <= 10) y = Math.max(y, 0.05);
-        if (s.inWeb) y = Math.max(y, 0.13);
-        if (s.pastInWeb < 10 && !s.inWeb) y = Math.max(y, 0.1);
-        if (s.onClimbable) xz = Math.max(xz, 0.15);
+        if (s.inWater || s.inLava) {
+            if (y < 0.02) y = 0.02;
+        }
+        if (s.pastWaterMovement <= 10) {
+            if (y < 0.05) y = 0.05;
+        }
+        if (s.inWeb) {
+            if (y < 0.13) y = 0.13;
+        }
+        if (s.pastInWeb < 10 && !s.inWeb) {
+            if (y < 0.1) y = 0.1;
+        }
+        if (s.onClimbable) {
+            if (xz < 0.15) xz = 0.15;
+        }
 
         s.toleranceXZ = xz;
         s.toleranceY = y;

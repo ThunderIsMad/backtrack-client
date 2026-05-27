@@ -64,17 +64,6 @@ public final class VanillaPlayerCollider {
         return new CollideResult(resultX, resultY, resultZ, ground, collidedH, collidedV);
     }
 
-    /** @param outGround length >= 1 — onGround after collision */
-    public double[] simplifiedCollision(Minecraft mc, double posX, double posY, double posZ,
-                                        double motionX, double motionY, double motionZ,
-                                        boolean[] outGround) {
-        CollideResult r = collide(mc, posX, posY, posZ, motionX, motionY, motionZ);
-        if (outGround != null && outGround.length > 0) {
-            outGround[0] = r.onGround;
-        }
-        return new double[]{r.motionX, r.motionY, r.motionZ};
-    }
-
     public boolean isOnGround(Minecraft mc, double posX, double posY, double posZ) {
         CollideResult r = collide(mc, posX, posY, posZ, 0, -0.500001, 0);
         return r.motionY != -0.500001;

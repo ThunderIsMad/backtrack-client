@@ -16,7 +16,7 @@ public class ClientTickHandler {
         sim.beginTick();
         sim.syncVerifiedFromPlayer(mc);
         sim.predictFlyingPacketBeforeVelocity();
-        sim.simulate(); // internally calls inputCapture.capture()
+        sim.simulate();
     }
 
     @SubscribeEvent(priority = EventPriority.HIGH)
@@ -25,8 +25,20 @@ public class ClientTickHandler {
         Minecraft mc = Minecraft.getMinecraft();
         if (mc.player == null) return;
         ClientSimulator sim = ClientSimulator.INSTANCE;
+
+        // During the velocity window, do NOT sync from the player —
+        // let the simulator's predicted motion drive the state.
+        if (sim.isInVelocityWindow()) {
+            // Only update onGround, nothing else.
+            sim.updateOnGround(mc);
+            sim.prepareNextTick();
+            return;
+        }
+
+        // Normal operation outside the velocity window.
         sim.syncFromPlayer();
         sim.advanceVerifiedFromPlayer(mc);
+        sim.updateOnGround(mc);
         sim.prepareNextTick();
     }
 }

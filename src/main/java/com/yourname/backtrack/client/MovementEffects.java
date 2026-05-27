@@ -10,12 +10,12 @@ public final class MovementEffects {
         PotionEffect speed = mc.player.getActivePotionEffect(MobEffects.SPEED);
         if (speed != null) {
             int amp = speed.getAmplifier() + 1;
-            aiMoveSpeed *= 1.0 + 0.4 * amp;
+            aiMoveSpeed *= 1.0f + 0.4f * amp;
         }
         PotionEffect slowness = mc.player.getActivePotionEffect(MobEffects.SLOWNESS);
         if (slowness != null) {
             int amp = slowness.getAmplifier() + 1;
-            aiMoveSpeed *= 1.0 - 0.15 * amp;
+            aiMoveSpeed *= 1.0f - 0.15f * amp;
         }
         return aiMoveSpeed;
     }
