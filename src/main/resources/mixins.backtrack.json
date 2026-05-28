@@ -8,7 +8,6 @@
     "MixinPlayerControllerMP",
     "MixinSPacketEntityVelocity",
     "MixinSPacketExplosion",
-    "MixinNetworkManagerSend",
-    "CPacketPlayerAccessor"
+    "MixinNetworkManagerSend"
   ]
 }

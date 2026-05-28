@@ -1,14 +1,12 @@
 package com.yourname.backtrack.client;
 
 import net.minecraft.client.entity.EntityPlayerSP;
-import net.minecraft.client.gui.GuiDisconnected;
-import net.minecraft.client.gui.GuiMainMenu;
-import net.minecraftforge.client.event.GuiOpenEvent;
 import net.minecraftforge.event.entity.living.LivingDeathEvent;
 import net.minecraftforge.event.world.WorldEvent;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent.PlayerLoggedOutEvent;
 import net.minecraftforge.fml.common.gameevent.PlayerEvent.PlayerRespawnEvent;
+import net.minecraftforge.fml.common.network.FMLNetworkEvent;
 
 public class SimLifecycle {
 
@@ -23,10 +21,8 @@ public class SimLifecycle {
     }
 
     @SubscribeEvent
-    public void onGuiOpen(GuiOpenEvent event) {
-        if (event.getGui() instanceof GuiMainMenu || event.getGui() instanceof GuiDisconnected) {
-            ClientSimulator.INSTANCE.reset();
-        }
+    public void onClientDisconnect(FMLNetworkEvent.ClientDisconnectionFromServerEvent event) {
+        ClientSimulator.INSTANCE.reset();
     }
 
     @SubscribeEvent

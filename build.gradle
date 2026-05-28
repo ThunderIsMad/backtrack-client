@@ -57,7 +57,6 @@ minecraft {
 }
 
 repositories {
-    mavenLocal()
     maven {
         name = "forge"
         url = "https://files.minecraftforge.net/maven"
@@ -77,8 +76,6 @@ dependencies {
         exclude module: 'gson'
         exclude module: 'commons-io'
     }
-
-    compileOnly 'optifine:OptiFine:1.12.2_HD_U_G5'
 
     shadow "org.jetbrains.kotlin:kotlin-stdlib-jdk8:${kotlin_version}"
     shadow('org.spongepowered:mixin:0.7.11-SNAPSHOT') {
