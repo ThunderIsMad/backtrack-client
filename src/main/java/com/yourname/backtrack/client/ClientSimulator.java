@@ -1,298 +1,408 @@
-package com.yourname.backtrack.client;
+package com.yourname.backtrack.client
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.entity.EntityLivingBase;
-import net.minecraft.entity.SharedMonsterAttributes;
-import net.minecraft.entity.player.EntityPlayer;
-import net.minecraft.enchantment.EnchantmentHelper;
-import net.minecraft.init.Enchantments;
-import net.minecraft.util.math.AxisAlignedBB;
+import net.minecraft.client.Minecraft
+import net.minecraft.entity.EntityLivingBase
+import net.minecraft.entity.SharedMonsterAttributes
+import net.minecraft.entity.player.EntityPlayer
+import net.minecraft.enchantment.EnchantmentHelper
+import net.minecraft.init.Enchantments
+import net.minecraft.util.math.AxisAlignedBB
+import kotlin.math.abs
+import kotlin.math.sqrt
 
-public final class ClientSimulator {
-    public static final ClientSimulator INSTANCE = new ClientSimulator();
+/**
+ * Client-side physical simulator that mirrors Intave's server-side movement
+ * prediction.  Runs alongside the real player, computes expected motion,
+ * and exposes tolerance windows that [VelocityModule.Reduce] exploits.
+ */
+object ClientSimulator {
 
-    private final MovementSimState s = new MovementSimState();
-    private final VanillaPlayerCollider collider = new VanillaPlayerCollider();
-    private final MovementInputCapture inputCapture = new MovementInputCapture();
-    private final MovementPhysicsEngine physics = new MovementPhysicsEngine();
+    // ── Sub-components ────────────────────────────────────────────
+    private val s = MovementSimState()
+    private val inputCapture = MovementInputCapture
+    private val physics = MovementPhysicsEngine
 
-    private static final double GRAVITY = 0.08, Y_MULT = 0.98, AIR_SLIP = 0.91;
-    /** Push strength applied per overlapping player (vanilla: 0.05 per axis). */
-    private static final double ENTITY_PUSH_STRENGTH = 0.05;
+    // ── Physics constants ──────────────────────────────────────────
+    private const val GRAVITY = 0.08
+    private const val Y_MULT = 0.98
+    private const val AIR_SLIP = 0.91
 
-    /** When true, Velocity Reduce/Reverse do not modify player motion (debug/shadow). */
-    public boolean shadowMode = false;
+    /** Push strength per overlapping player (vanilla: 0.05 per axis). */
+    private const val ENTITY_PUSH_STRENGTH = 0.05
 
-    private ClientSimulator() {}
+    // ── Public state ───────────────────────────────────────────────
 
-    public MovementSimState state() { return s; }
-    public void reset() { s.reset(); }
+    /** When true, Velocity Reduce/Reverse must not modify player motion. */
+    @JvmField var shadowMode = false
 
-    public void beginTick() { s.beginTick(); }
+    // ── Accessors ──────────────────────────────────────────────────
 
-    public void syncVerifiedFromPlayer(Minecraft mc) {
-        if (mc.player == null) return;
-        s.playerPosX = mc.player.posX;
-        s.playerPosY = mc.player.posY;
-        s.playerPosZ = mc.player.posZ;
+    fun state(): MovementSimState = s
+
+    fun reset() {
+        // Replace the entire state with a fresh default instance
+        // (Kotlin data class gives us a clean zero-state copy).
+        val fresh = MovementSimState()
+        // Copy all fields from fresh into s
+        s.verifiedX = fresh.verifiedX
+        s.verifiedY = fresh.verifiedY
+        s.verifiedZ = fresh.verifiedZ
+        s.lastX = fresh.lastX
+        s.lastY = fresh.lastY
+        s.lastZ = fresh.lastZ
+        s.baseMotionX = fresh.baseMotionX
+        s.baseMotionY = fresh.baseMotionY
+        s.baseMotionZ = fresh.baseMotionZ
+        s.baseMotionXBeforeVelocity = fresh.baseMotionXBeforeVelocity
+        s.baseMotionYBeforeVelocity = fresh.baseMotionYBeforeVelocity
+        s.baseMotionZBeforeVelocity = fresh.baseMotionZBeforeVelocity
+        s.predictedMotionX = fresh.predictedMotionX
+        s.predictedMotionY = fresh.predictedMotionY
+        s.predictedMotionZ = fresh.predictedMotionZ
+        s.pastExternalVelocity = fresh.pastExternalVelocity
+        s.pastVelocity = fresh.pastVelocity
+        s.pastPlayerReduceAttackPhysics = fresh.pastPlayerReduceAttackPhysics
+        s.reduceTicks = fresh.reduceTicks
+        s.pastFlyingPacketAccurate = fresh.pastFlyingPacketAccurate
+        s.pastWaterMovement = fresh.pastWaterMovement
+        s.pastInWeb = fresh.pastInWeb
+        s.webTicks = fresh.webTicks
+        s.onGround = fresh.onGround
+        s.lastOnGround = fresh.lastOnGround
+        s.collidedHorizontally = fresh.collidedHorizontally
+        s.collidedVertically = fresh.collidedVertically
+        s.sprinting = fresh.sprinting
+        s.sprintingAllowed = fresh.sprintingAllowed
+        s.sneaking = fresh.sneaking
+        s.handActive = fresh.handActive
+        s.physicsUnpredictableVelocityExpected = fresh.physicsUnpredictableVelocityExpected
+        s.inWater = fresh.inWater
+        s.inWeb = fresh.inWeb
+        s.inLava = fresh.inLava
+        s.onClimbable = fresh.onClimbable
+        s.forwardKey = fresh.forwardKey
+        s.strafeKey = fresh.strafeKey
+        s.jumpKey = fresh.jumpKey
+        s.sprintKey = fresh.sprintKey
+        s.sneakKey = fresh.sneakKey
+        s.rotationYaw = fresh.rotationYaw
+        s.yawSin = fresh.yawSin
+        s.yawCos = fresh.yawCos
+        s.aiMoveSpeed = fresh.aiMoveSpeed
+        s.blockSlipperiness = fresh.blockSlipperiness
+        s.jumpMotion = fresh.jumpMotion
+        s.resetMotion = fresh.resetMotion
+        s.toleranceXZ = fresh.toleranceXZ
+        s.toleranceY = fresh.toleranceY
+        s.lastMotionX = fresh.lastMotionX
+        s.lastMotionY = fresh.lastMotionY
+        s.lastMotionZ = fresh.lastMotionZ
+        s.playerPosX = fresh.playerPosX
+        s.playerPosY = fresh.playerPosY
+        s.playerPosZ = fresh.playerPosZ
+        s.positionInitialized = fresh.positionInitialized
+        s.physicsPacketRelinkFlyVL = fresh.physicsPacketRelinkFlyVL
+        s.entityPushX = fresh.entityPushX
+        s.entityPushZ = fresh.entityPushZ
+    }
+
+    fun beginTick() { s.beginTick() }
+
+    // ── Sync ──────────────────────────────────────────────────────
+
+    fun syncVerifiedFromPlayer(mc: Minecraft) {
+        val player = mc.player ?: return
+        s.playerPosX = player.posX
+        s.playerPosY = player.posY
+        s.playerPosZ = player.posZ
+
         if (!s.positionInitialized) {
-            s.verifiedX = mc.player.posX;
-            s.verifiedY = mc.player.posY;
-            s.verifiedZ = mc.player.posZ;
-            s.lastX = s.verifiedX;
-            s.lastY = s.verifiedY;
-            s.lastZ = s.verifiedZ;
-            s.positionInitialized = true;
-            return;
+            s.verifiedX = player.posX
+            s.verifiedY = player.posY
+            s.verifiedZ = player.posZ
+            s.lastX = s.verifiedX
+            s.lastY = s.verifiedY
+            s.lastZ = s.verifiedZ
+            s.positionInitialized = true
+            return
         }
-        double drift = Math.sqrt(sq(mc.player.posX - s.verifiedX) + sq(mc.player.posY - s.verifiedY)
-                + sq(mc.player.posZ - s.verifiedZ));
+
+        val drift = sqrt(
+            sq(player.posX - s.verifiedX) +
+            sq(player.posY - s.verifiedY) +
+            sq(player.posZ - s.verifiedZ)
+        )
         if (drift > 8.0 || (drift > 1.0 && s.isInVelocityWindow())) {
-            s.verifiedX = mc.player.posX;
-            s.verifiedY = mc.player.posY;
-            s.verifiedZ = mc.player.posZ;
-            s.physicsPacketRelinkFlyVL = 0;
+            s.verifiedX = player.posX
+            s.verifiedY = player.posY
+            s.verifiedZ = player.posZ
+            s.physicsPacketRelinkFlyVL = 0
         }
     }
 
-    public void predictFlyingPacketBeforeVelocity() {
-        if (s.pastVelocity != 0) return;
-        double mx = s.baseMotionXBeforeVelocity * AIR_SLIP;
-        double my = (s.baseMotionYBeforeVelocity - GRAVITY) * Y_MULT;
-        double mz = s.baseMotionZBeforeVelocity * AIR_SLIP;
-        if (mx == 0 || my == 0 || mz == 0) return;
+    fun predictFlyingPacketBeforeVelocity() {
+        if (s.pastVelocity != 0) return
+        var mx = s.baseMotionXBeforeVelocity * AIR_SLIP
+        var my = (s.baseMotionYBeforeVelocity - GRAVITY) * Y_MULT
+        var mz = s.baseMotionZBeforeVelocity * AIR_SLIP
+        if (mx == 0.0 || my == 0.0 || mz == 0.0) return
 
-        Minecraft mc = Minecraft.getMinecraft();
-        VanillaPlayerCollider.CollideResult r = collider.collide(mc, s.verifiedX, s.verifiedY, s.verifiedZ, mx, my, mz);
-        if ((r.onGround || s.onGround) && (r.motionX * r.motionX + r.motionY * r.motionY + r.motionZ * r.motionZ) < 0.009) {
-            s.physicsUnpredictableVelocityExpected = true;
-            s.pastFlyingPacketAccurate = 0;
+        val mc = Minecraft.getMinecraft() ?: return
+        val r = VanillaPlayerCollider.collide(
+            mc, s.verifiedX, s.verifiedY, s.verifiedZ, mx, my, mz
+        )
+        if ((r.onGround || s.onGround) &&
+            (r.motionX * r.motionX + r.motionY * r.motionY + r.motionZ * r.motionZ) < 0.009) {
+            s.physicsUnpredictableVelocityExpected = true
+            s.pastFlyingPacketAccurate = 0
         }
     }
+
+    // ── Entity push ────────────────────────────────────────────────
 
     /**
-     * Scans nearby EntityPlayer instances and accumulates the vanilla applyEntityCollision
-     * push into s.entityPushX / s.entityPushZ.  Called once per tick before simulate().
-     * Vanilla logic (EntityLivingBase.collideWithNearbyEntities):
-     *   For each other player whose AABB intersects ours (expanded by 0.2 on XZ):
-     *     dx = other.posX - self.posX
-     *     dz = other.posZ - self.posZ
-     *     dist = max(|dx|, |dz|)
-     *     if dist < 0.01: use random offsets
-     *     dist = sqrt(dx*dx + dz*dz)
-     *     normalize, scale by 0.05, divide by dist
-     *     self.motionX -= pushX; self.motionZ -= pushZ
+     * Scans nearby [EntityPlayer] instances and accumulates the vanilla
+     * `applyEntityCollision` push into [MovementSimState.entityPushX]
+     * and [MovementSimState.entityPushZ].
+     *
+     * Called once per tick before [simulate].
      */
-    public void collectEntityPush(Minecraft mc) {
-        if (mc.player == null || mc.world == null) return;
+    fun collectEntityPush(mc: Minecraft) {
+        val player = mc.player ?: return
+        val world  = mc.world  ?: return
 
-        double pushX = 0, pushZ = 0;
-        AxisAlignedBB selfBox = mc.player.getEntityBoundingBox().expand(0.2, 0.0, 0.2);
+        var pushX = 0.0
+        var pushZ = 0.0
+        val selfBox = player.entityBoundingBox.expand(0.2, 0.0, 0.2)
 
-        for (net.minecraft.entity.Entity e : mc.world.loadedEntityList) {
-            if (!(e instanceof EntityPlayer)) continue;
-            if (e == mc.player) continue;
-            if (!e.noClip && !mc.player.noClip) {
-                AxisAlignedBB otherBox = e.getEntityBoundingBox();
-                if (selfBox.intersects(otherBox)) {
-                    double dx = e.posX - mc.player.posX;
-                    double dz = e.posZ - mc.player.posZ;
-                    double maxDelta = Math.max(Math.abs(dx), Math.abs(dz));
-                    if (maxDelta >= 0.01) {
-                        double dist = Math.sqrt(dx * dx + dz * dz);
-                        dx /= dist;
-                        dz /= dist;
-                        double scale = Math.min(1.0, ENTITY_PUSH_STRENGTH / maxDelta);
-                        // other pushes us: we subtract (vanilla: attacker subtracts from self)
-                        pushX -= dx * scale;
-                        pushZ -= dz * scale;
-                    }
-                }
-            }
+        for (e in world.loadedEntityList) {
+            if (e !is EntityPlayer) continue
+            if (e === player) continue
+            if (e.noClip && player.noClip) continue
+            val otherBox = e.entityBoundingBox
+            if (!selfBox.intersects(otherBox)) continue
+
+            var dx = e.posX - player.posX
+            var dz = e.posZ - player.posZ
+            val maxDelta = maxOf(abs(dx), abs(dz))
+            if (maxDelta < 0.01) continue
+
+            val dist = sqrt(dx * dx + dz * dz)
+            dx /= dist
+            dz /= dist
+            val scale = minOf(1.0, ENTITY_PUSH_STRENGTH / maxDelta)
+            // other pushes us → we subtract (vanilla: attacker subtracts from self)
+            pushX -= dx * scale
+            pushZ -= dz * scale
         }
 
-        s.entityPushX = pushX;
-        s.entityPushZ = pushZ;
+        s.entityPushX = pushX
+        s.entityPushZ = pushZ
     }
 
-    public void simulate() {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc.player == null) return;
+    // ── Simulation pipeline ────────────────────────────────────────
 
-        collectEntityPush(mc);
-        inputCapture.capture(s, mc);
-        maybeSearchKeys(mc);
-        physics.simulate(s);
-        ToleranceCalculator.compute(s);
-        SimDebug.logTick(this);
+    fun simulate() {
+        val mc = Minecraft.getMinecraft() ?: return
+        if (mc.player == null) return
+
+        collectEntityPush(mc)
+        inputCapture.capture(s, mc)
+        maybeSearchKeys(mc)
+        physics.simulate(s)
+        ToleranceCalculator.compute(s)
+        SimDebug.logTick(this)
     }
 
-    private void maybeSearchKeys(Minecraft mc) {
-        double[] pred = physics.simulateOneTick(s, s.forwardKey, s.strafeKey);
-        double err = Math.sqrt(sq(pred[0] - mc.player.motionX) + sq(pred[2] - mc.player.motionZ));
-        ToleranceCalculator.compute(s);
-        boolean needSearch = err > Math.max(s.toleranceXZ * 2, 0.008)
-                || (s.pastVelocity > 0 && s.pastVelocity < 25);
-        if (!needSearch) return;
+    private fun maybeSearchKeys(mc: Minecraft) {
+        val pred = physics.simulateOneTick(s, s.forwardKey, s.strafeKey)
+        val err  = sqrt(sq(pred[0] - mc.player.motionX) + sq(pred[2] - mc.player.motionZ))
+        ToleranceCalculator.compute(s)
 
-        int[] search = InputKeySearcher.search(s, physics, mc.player.motionX, mc.player.motionZ);
+        val needSearch = err > maxOf(s.toleranceXZ * 2.0, 0.008)
+            || (s.pastVelocity > 0 && s.pastVelocity < 25)
+        if (!needSearch) return
+
+        val search = InputKeySearcher.search(s, physics, mc.player.motionX, mc.player.motionZ)
         if (search != null) {
-            s.forwardKey = search[0];
-            s.strafeKey = search[1];
+            s.forwardKey = search[0]
+            s.strafeKey = search[1]
         }
     }
 
-    public void recalculateAfterOutgoingPacket() {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc.player == null) return;
-        predictFlyingPacketBeforeVelocity();
-        inputCapture.capture(s, mc);
-        physics.simulate(s);
-        ToleranceCalculator.compute(s);
+    fun recalculateAfterOutgoingPacket() {
+        val mc = Minecraft.getMinecraft() ?: return
+        if (mc.player == null) return
+        predictFlyingPacketBeforeVelocity()
+        inputCapture.capture(s, mc)
+        physics.simulate(s)
+        ToleranceCalculator.compute(s)
     }
 
-    public void syncFromPlayer() {
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc.player == null) return;
-        s.baseMotionX = mc.player.motionX;
-        s.baseMotionY = mc.player.motionY;
-        s.baseMotionZ = mc.player.motionZ;
+    fun syncFromPlayer() {
+        val mc = Minecraft.getMinecraft() ?: return
+        val player = mc.player ?: return
+        s.baseMotionX = player.motionX
+        s.baseMotionY = player.motionY
+        s.baseMotionZ = player.motionZ
     }
 
-    public void advanceVerifiedFromPlayer(Minecraft mc) {
-        if (mc.player == null) return;
-        double dx = mc.player.posX - s.lastX;
-        double dy = mc.player.posY - s.lastY;
-        double dz = mc.player.posZ - s.lastZ;
-        if (Math.abs(dx) + Math.abs(dy) + Math.abs(dz) > 1e-6) {
-            s.verifiedX = mc.player.posX;
-            s.verifiedY = mc.player.posY;
-            s.verifiedZ = mc.player.posZ;
+    fun advanceVerifiedFromPlayer(mc: Minecraft) {
+        val player = mc.player ?: return
+        val dx = player.posX - s.lastX
+        val dy = player.posY - s.lastY
+        val dz = player.posZ - s.lastZ
+        if (abs(dx) + abs(dy) + abs(dz) > 1e-6) {
+            s.verifiedX = player.posX
+            s.verifiedY = player.posY
+            s.verifiedZ = player.posZ
         }
-        s.lastX = mc.player.posX;
-        s.lastY = mc.player.posY;
-        s.lastZ = mc.player.posZ;
+        s.lastX = player.posX
+        s.lastY = player.posY
+        s.lastZ = player.posZ
     }
 
-    public void updateOnGround(Minecraft mc) {
-        s.onGround = collider.isOnGround(mc, s.verifiedX, s.verifiedY, s.verifiedZ);
+    fun updateOnGround(mc: Minecraft) {
+        s.onGround = VanillaPlayerCollider.isOnGround(mc, s.verifiedX, s.verifiedY, s.verifiedZ)
     }
 
-    public void prepareNextTick() {
-        Minecraft mc = Minecraft.getMinecraft();
-        double slip = s.lastOnGround
-                ? MovementFriction.groundSlipperinessForDecay(mc, s.verifiedX, s.verifiedY, s.verifiedZ)
-                : AIR_SLIP;
-        s.baseMotionX *= slip;
-        s.baseMotionY = s.lastOnGround ? 0.0 : (s.baseMotionY - GRAVITY) * Y_MULT;
-        s.baseMotionZ *= slip;
-        if (Math.abs(s.baseMotionX) < s.resetMotion) s.baseMotionX = 0;
-        if (Math.abs(s.baseMotionY) < s.resetMotion) s.baseMotionY = 0;
-        if (Math.abs(s.baseMotionZ) < s.resetMotion) s.baseMotionZ = 0;
+    // ── Tick transition ────────────────────────────────────────────
+
+    fun prepareNextTick() {
+        val mc = Minecraft.getMinecraft() ?: return
+        val slip = if (s.lastOnGround)
+            MovementFriction.groundSlipperinessForDecay(mc, s.verifiedX, s.verifiedY, s.verifiedZ)
+        else
+            AIR_SLIP
+
+        s.baseMotionX *= slip
+        s.baseMotionY = if (s.lastOnGround) 0.0 else (s.baseMotionY - GRAVITY) * Y_MULT
+        s.baseMotionZ *= slip
+
+        if (abs(s.baseMotionX) < s.resetMotion) s.baseMotionX = 0.0
+        if (abs(s.baseMotionY) < s.resetMotion) s.baseMotionY = 0.0
+        if (abs(s.baseMotionZ) < s.resetMotion) s.baseMotionZ = 0.0
+
         if (s.inWater) {
-            s.baseMotionX *= 0.8;
-            s.baseMotionZ *= 0.8;
+            s.baseMotionX *= 0.8
+            s.baseMotionZ *= 0.8
         }
         if (s.inWeb) {
-            s.baseMotionX = 0;
-            s.baseMotionY = 0;
-            s.baseMotionZ = 0;
+            s.baseMotionX = 0.0
+            s.baseMotionY = 0.0
+            s.baseMotionZ = 0.0
         }
-        s.lastOnGround = s.onGround;
-        if (s.pastPlayerReduceAttackPhysics < 100) s.pastPlayerReduceAttackPhysics++;
-        s.pastFlyingPacketAccurate++;
+
+        s.lastOnGround = s.onGround
+        if (s.pastPlayerReduceAttackPhysics < 100) s.pastPlayerReduceAttackPhysics++
+        s.pastFlyingPacketAccurate++
     }
 
-    public void applyVelocity(double vx, double vy, double vz) {
-        s.baseMotionXBeforeVelocity = s.baseMotionX;
-        s.baseMotionYBeforeVelocity = s.baseMotionY;
-        s.baseMotionZBeforeVelocity = s.baseMotionZ;
-        s.baseMotionX = vx;
-        s.baseMotionY = vy;
-        s.baseMotionZ = vz;
-        s.pastExternalVelocity = 0;
-        s.pastVelocity = 0;
-        s.reduceTicks = 0;
+    // ── External events ────────────────────────────────────────────
+
+    fun applyVelocity(vx: Double, vy: Double, vz: Double) {
+        s.baseMotionXBeforeVelocity = s.baseMotionX
+        s.baseMotionYBeforeVelocity = s.baseMotionY
+        s.baseMotionZBeforeVelocity = s.baseMotionZ
+        s.baseMotionX = vx
+        s.baseMotionY = vy
+        s.baseMotionZ = vz
+        s.pastExternalVelocity = 0
+        s.pastVelocity = 0
+        s.reduceTicks = 0
     }
 
-    public void applyExplosion(double vx, double vy, double vz) {
-        s.baseMotionX += vx;
-        s.baseMotionY += vy;
-        s.baseMotionZ += vz;
+    fun applyExplosion(vx: Double, vy: Double, vz: Double) {
+        s.baseMotionX += vx
+        s.baseMotionY += vy
+        s.baseMotionZ += vz
     }
 
-    public void handleTeleport(double x, double y, double z) {
-        s.verifiedX = x;
-        s.verifiedY = y;
-        s.verifiedZ = z;
-        s.lastX = x;
-        s.lastY = y;
-        s.lastZ = z;
-        s.baseMotionX = 0;
-        s.baseMotionY = 0;
-        s.baseMotionZ = 0;
-        s.predictedMotionX = 0;
-        s.predictedMotionY = 0;
-        s.predictedMotionZ = 0;
-        s.pastExternalVelocity = 100;
-        s.pastVelocity = 100;
-        s.reduceTicks = 0;
-        s.physicsPacketRelinkFlyVL = 0;
-        s.physicsUnpredictableVelocityExpected = false;
+    fun handleTeleport(x: Double, y: Double, z: Double) {
+        s.verifiedX = x
+        s.verifiedY = y
+        s.verifiedZ = z
+        s.lastX = x
+        s.lastY = y
+        s.lastZ = z
+        s.baseMotionX = 0.0
+        s.baseMotionY = 0.0
+        s.baseMotionZ = 0.0
+        s.predictedMotionX = 0.0
+        s.predictedMotionY = 0.0
+        s.predictedMotionZ = 0.0
+        s.pastExternalVelocity = 100
+        s.pastVelocity = 100
+        s.reduceTicks = 0
+        s.physicsPacketRelinkFlyVL = 0
+        s.physicsUnpredictableVelocityExpected = false
     }
 
-    public void onOutgoingMovement(boolean posChanged, double x, double y, double z) {
+    fun onOutgoingMovement(posChanged: Boolean, x: Double, y: Double, z: Double) {
         if (posChanged) {
-            s.verifiedX = x;
-            s.verifiedY = y;
-            s.verifiedZ = z;
-            s.positionInitialized = true;
+            s.verifiedX = x
+            s.verifiedY = y
+            s.verifiedZ = z
+            s.positionInitialized = true
         }
-        s.pastExternalVelocity++;
-        s.pastVelocity++;
-        s.reduceTicks = 0;
+        s.pastExternalVelocity++
+        s.pastVelocity++
+        s.reduceTicks = 0
     }
 
-    public void onAttack(EntityPlayer player, EntityLivingBase target) {
-        if (player == null || target == null) return;
-        if (!(target instanceof EntityPlayer)) return;
+    fun onAttack(player: EntityPlayer?, target: EntityLivingBase?) {
+        if (player == null || target == null) return
+        if (target !is EntityPlayer) return
 
-        boolean sprint = player.isSprinting();
-        int kbLevel = EnchantmentHelper.getEnchantmentLevel(Enchantments.KNOCKBACK, player.getHeldItemMainhand());
-        double attackDamage = player.getEntityAttribute(SharedMonsterAttributes.ATTACK_DAMAGE).getAttributeValue();
-        boolean hasWeaponDamage = attackDamage > 0.0;
+        val sprint  = player.isSprinting
+        val kbLevel = EnchantmentHelper.getEnchantmentLevel(
+            Enchantments.KNOCKBACK, player.heldItemMainhand
+        )
+        val attackDamage = player
+            .getEntityAttribute(SharedMonsterAttributes.ATTACK_DAMAGE)
+            .attributeValue
+        val hasWeaponDamage = attackDamage > 0.0
 
         if (hasWeaponDamage && (sprint || kbLevel > 0)) {
-            s.pastPlayerReduceAttackPhysics = 0;
-            boolean limitedToOneAttack = kbLevel == 0;
+            s.pastPlayerReduceAttackPhysics = 0
+            val limitedToOneAttack = kbLevel == 0
             if (s.reduceTicks == 0 || !limitedToOneAttack) {
-                if (s.reduceTicks < 3) s.reduceTicks++;
+                if (s.reduceTicks < 3) s.reduceTicks++
             }
         }
     }
 
-    public boolean isInVelocityWindow() { return s.isInVelocityWindow(); }
+    // ── Convenience queries ────────────────────────────────────────
 
-    public boolean isFlyingJumpExpected() {
-        double px = s.predictedMotionX, py = s.predictedMotionY, pz = s.predictedMotionZ;
-        if (Math.abs(px) >= 0.1 || Math.abs(pz) >= 0.1) return false;
-        if (Math.abs(py - s.jumpMotion) >= 0.05) return false;
-        if (!s.onGround && !s.lastOnGround) return false;
-        Minecraft mc = Minecraft.getMinecraft();
-        if (mc.player == null) return false;
-        double diffY = py - mc.player.motionY;
-        return diffY > 0.01 && diffY < 0.03;
+    fun isInVelocityWindow(): Boolean = s.isInVelocityWindow()
+
+    fun isFlyingJumpExpected(): Boolean {
+        val px = s.predictedMotionX
+        val py = s.predictedMotionY
+        val pz = s.predictedMotionZ
+        if (abs(px) >= 0.1 || abs(pz) >= 0.1) return false
+        if (abs(py - s.jumpMotion) >= 0.05) return false
+        if (!s.onGround && !s.lastOnGround) return false
+
+        val mc = Minecraft.getMinecraft() ?: return false
+        val player = mc.player ?: return false
+        val diffY = py - player.motionY
+        return diffY > 0.01 && diffY < 0.03
     }
 
-    public double getExpectedX() { return s.predictedMotionX; }
-    public double getExpectedY() { return s.predictedMotionY; }
-    public double getExpectedZ() { return s.predictedMotionZ; }
-    public double getExpectedMag() {
-        return Math.sqrt(s.predictedMotionX * s.predictedMotionX + s.predictedMotionZ * s.predictedMotionZ);
-    }
-    public double getToleranceXZ() { ToleranceCalculator.compute(s); return s.toleranceXZ; }
-    public double getToleranceY() { ToleranceCalculator.compute(s); return s.toleranceY; }
-    public int getPastExternalVelocity() { return s.pastExternalVelocity; }
+    val expectedX: Double get() = s.predictedMotionX
+    val expectedY: Double get() = s.predictedMotionY
+    val expectedZ: Double get() = s.predictedMotionZ
+    val expectedMag: Double get() = sqrt(
+        s.predictedMotionX * s.predictedMotionX + s.predictedMotionZ * s.predictedMotionZ
+    )
 
-    private double sq(double v) { return v * v; }
+    val toleranceXZ: Double get() { ToleranceCalculator.compute(s); return s.toleranceXZ }
+    val toleranceY: Double  get() { ToleranceCalculator.compute(s); return s.toleranceY }
+
+    val pastExternalVelocity: Int get() = s.pastExternalVelocity
+
+    // ── Internal helpers ───────────────────────────────────────────
+
+    private fun sq(v: Double): Double = v * v
 }
