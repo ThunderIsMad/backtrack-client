@@ -1,233 +1,232 @@
-package com.yourname.backtrack.module.impl;
+package com.yourname.backtrack.module.impl
 
-import com.yourname.backtrack.module.Category;
-import com.yourname.backtrack.module.Module;
-import com.yourname.backtrack.setting.Setting;
-import com.yourname.backtrack.setting.BooleanSetting;
-import com.yourname.backtrack.setting.ModeSetting;
-import com.yourname.backtrack.setting.NumberSetting;
-import net.minecraft.entity.EntityLivingBase;
-import net.minecraft.network.play.client.CPacketEntityAction;
-import org.lwjgl.input.Keyboard;
-
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
+import com.yourname.backtrack.client.ClientSimulator
+import com.yourname.backtrack.module.Category
+import com.yourname.backtrack.module.Module
+import com.yourname.backtrack.setting.*
+import net.minecraft.entity.EntityLivingBase
+import net.minecraft.network.play.client.CPacketEntityAction
+import org.lwjgl.input.Keyboard
+import java.util.*
+import kotlin.math.abs
+import kotlin.math.atan2
+import kotlin.math.toDegrees
 
 /**
- * WTap – break sprint to increase knockback, Intave‑proof.
+ * WTap — briefly interrupt sprint on hit to increase knockback.
+ * Intave-aware: randomises timing, respects velocity windows,
+ * and mirrors vanilla sprint-drop behaviour.
  */
-public class WTapModule extends Module {
+class WTapModule : Module("WTap", Category.COMBAT, Keyboard.KEY_NONE) {
 
-    private final ModeSetting mode = new ModeSetting("Mode",
-            java.util.Arrays.asList("Packet", "SprintTap", "MoveBlock"), "Packet");
+    private val mode = ModeSetting("Mode", listOf("Packet", "SprintTap", "MoveBlock"), "Packet")
 
-    private final NumberSetting chance = new NumberSetting("Chance", 80, 0, 100, 1);
-    private final NumberSetting hurtTimeThreshold = new NumberSetting("HurtTimeThreshold", 10, 0, 10, 1);
-    private final BooleanSetting onlyOnGround = new BooleanSetting("OnlyOnGround", true);
-    private final BooleanSetting onlyFacing = new BooleanSetting("OnlyFacing", true);
-    private final BooleanSetting notInWater = new BooleanSetting("NotInWater", true);
+    private val chance           = NumberSetting("Chance", 80, 0, 100, 1)
+    private val hurtTimeThreshold = NumberSetting("HurtTimeThreshold", 10, 0, 10, 1)
+    private val onlyOnGround     = BooleanSetting("OnlyOnGround", true)
+    private val onlyFacing       = BooleanSetting("OnlyFacing", true)
+    private val notInWater       = BooleanSetting("NotInWater", true)
 
-    private final NumberSetting packetDelayMin = new NumberSetting("PacketDelayMin", 1, 0, 4, 1);
-    private final NumberSetting packetDelayMax = new NumberSetting("PacketDelayMax", 2, 0, 4, 1);
+    // Packet mode
+    private val packetDelayMin   = NumberSetting("PacketDelayMin", 1, 0, 4, 1)
+    private val packetDelayMax   = NumberSetting("PacketDelayMax", 2, 0, 4, 1)
 
-    private final NumberSetting stopTicksMin = new NumberSetting("StopTicksMin", 0, 0, 10, 1);
-    private final NumberSetting stopTicksMax = new NumberSetting("StopTicksMax", 1, 0, 10, 1);
-    private final NumberSetting reSprintDelayMin = new NumberSetting("ReSprintDelayMin", 1, 0, 10, 1);
-    private final NumberSetting reSprintDelayMax = new NumberSetting("ReSprintDelayMax", 2, 0, 10, 1);
+    // SprintTap mode
+    private val stopTicksMin     = NumberSetting("StopTicksMin", 0, 0, 10, 1)
+    private val stopTicksMax     = NumberSetting("StopTicksMax", 1, 0, 10, 1)
+    private val reSprintDelayMin = NumberSetting("ReSprintDelayMin", 1, 0, 10, 1)
+    private val reSprintDelayMax = NumberSetting("ReSprintDelayMax", 2, 0, 10, 1)
 
-    private final NumberSetting moveBlockStartMin = new NumberSetting("MoveBlockStartMin", 0, 0, 3, 1);
-    private final NumberSetting moveBlockStartMax = new NumberSetting("MoveBlockStartMax", 1, 0, 3, 1);
-    private final NumberSetting moveBlockDurationMin = new NumberSetting("MoveBlockDurationMin", 0, 0, 3, 1);
-    private final NumberSetting moveBlockDurationMax = new NumberSetting("MoveBlockDurationMax", 2, 0, 3, 1);
+    // MoveBlock mode
+    private val moveBlockStartMin    = NumberSetting("MoveBlockStartMin", 0, 0, 3, 1)
+    private val moveBlockStartMax    = NumberSetting("MoveBlockStartMax", 1, 0, 3, 1)
+    private val moveBlockDurationMin = NumberSetting("MoveBlockDurationMin", 0, 0, 3, 1)
+    private val moveBlockDurationMax = NumberSetting("MoveBlockDurationMax", 2, 0, 3, 1)
 
-    private final Random random = new Random();
-    private int phase;
-    private int subTimer;
-    private boolean cancelSprint;
-    private boolean blockMovement;
-    private int lastHurtTime;
+    // ── Intave-aware: randomised jitter ──────────────────────────
+    private val randomiseTimings = BooleanSetting("RandomiseTimings", true)
 
-    public WTapModule() {
-        super("WTap", Category.COMBAT, Keyboard.KEY_NONE);
+    private val random = Random()
+    private var phase = 0
+    private var subTimer = 0
+    private var cancelSprint = false
+    private var blockMovement = false
+    private var lastHurtTime = 0
+
+    // Drifting delay offsets (re-rolled periodically)
+    private var packetDrift = 0
+    private var sprintDrift = 0
+
+    init {
         addSettings(mode, chance, hurtTimeThreshold,
-                onlyOnGround, onlyFacing, notInWater,
-                packetDelayMin, packetDelayMax,
-                stopTicksMin, stopTicksMax, reSprintDelayMin, reSprintDelayMax,
-                moveBlockStartMin, moveBlockStartMax, moveBlockDurationMin, moveBlockDurationMax);
-        addHudSettings();
+            onlyOnGround, onlyFacing, notInWater,
+            packetDelayMin, packetDelayMax,
+            stopTicksMin, stopTicksMax, reSprintDelayMin, reSprintDelayMax,
+            moveBlockStartMin, moveBlockStartMax, moveBlockDurationMin, moveBlockDurationMax,
+            randomiseTimings)
+        addHudSettings()
     }
 
-    @Override
-    public void onClientTick() {
-        if (!isEnabled() || mc().player == null || mc().world == null) return;
+    override fun onEnable() { reset() }
+    override fun onDisable() { reset() }
 
-        int hurtTime = mc().player.hurtTime;
+    private fun reset() {
+        phase = 0; subTimer = 0
+        cancelSprint = false; blockMovement = false
+    }
+
+    override fun onClientTick() {
+        if (!isEnabled) return
+        val player = mc.player ?: return
+        if (mc.world == null) return
+
+        val hurtTime = player.hurtTime
         if (hurtTime > 0 && lastHurtTime == 0) {
-            onPlayerHit();
+            onPlayerHit()
         }
 
-        String m = mode.getValue();
-        switch (m) {
-            case "Packet": handlePacket(); break;
-            case "SprintTap": handleSprintTap(); break;
-            case "MoveBlock": handleMoveBlock(); break;
+        when (mode.value) {
+            "Packet"    -> handlePacket()
+            "SprintTap" -> handleSprintTap()
+            "MoveBlock" -> handleMoveBlock()
         }
-        lastHurtTime = hurtTime;
+        lastHurtTime = hurtTime
     }
 
-    private void onPlayerHit() {
-        if (!meetsConditions()) return;
-        if (random.nextInt(100) >= (int) chance.getValue()) return;
+    // ── Trigger ──────────────────────────────────────────────────
 
-        switch (mode.getValue()) {
-            case "Packet":
-                phase = 1; subTimer = 0; break;
-            case "SprintTap":
-                phase = 1; subTimer = 0; cancelSprint = true; break;
-            case "MoveBlock":
-                phase = 1; subTimer = 0; break;
+    private fun onPlayerHit() {
+        if (!meetsConditions()) return
+        if (random.nextInt(100) >= chance.value.toInt()) return
+
+        // Intave: don't WTap inside velocity window — sprint changes
+        // look like velocity manipulation
+        if (ClientSimulator.isInVelocityWindow()) return
+
+        // Re-roll timing drift every activation
+        if (randomiseTimings.value) {
+            packetDrift = (random.nextDouble() * 2 - 1).toInt() // ±1
+            sprintDrift = (random.nextDouble() * 2 - 1).toInt()
+        }
+
+        when (mode.value) {
+            "Packet"    -> { phase = 1; subTimer = 0 }
+            "SprintTap" -> { phase = 1; subTimer = 0; cancelSprint = true }
+            "MoveBlock" -> { phase = 1; subTimer = 0 }
         }
     }
 
-    private boolean meetsConditions() {
-        if (mc().player == null) return false;
-        if (onlyOnGround.getValue() && !mc().player.onGround) return false;
-        if (notInWater.getValue() && (mc().player.isInWater() || mc().player.isInLava())) return false;
+    // ── Conditions ───────────────────────────────────────────────
 
-        EntityLivingBase target = mc().player.getLastAttackedEntity();
-        if (target == null) return false;
+    private fun meetsConditions(): Boolean {
+        val player = mc.player ?: return false
+        if (onlyOnGround.value && !player.onGround) return false
+        if (notInWater.value && (player.isInWater || player.isInLava)) return false
 
-        if (onlyFacing.getValue()) {
-            double dx = mc().player.posX - target.posX;
-            double dz = mc().player.posZ - target.posZ;
-            double angle = Math.toDegrees(Math.atan2(dz, dx)) - target.rotationYawHead;
-            angle = (angle % 360 + 540) % 360 - 180;
-            if (Math.abs(angle) > 90) return false;
+        val target = player.lastAttackedEntity as? EntityLivingBase ?: return false
+
+        if (onlyFacing.value) {
+            val dx = player.posX - target.posX
+            val dz = player.posZ - target.posZ
+            var angle = toDegrees(atan2(dz, dx)) - target.rotationYawHead
+            angle = (angle % 360 + 540) % 360 - 180
+            if (abs(angle) > 90) return false
         }
 
-        if (target.hurtTime > (int) hurtTimeThreshold.getValue()) return false;
-        return true;
+        if (target.hurtTime > hurtTimeThreshold.value.toInt()) return false
+        return true
     }
 
-    private void handlePacket() {
-        if (phase == 0) return;
-        if (phase == 1) {
-            subTimer++;
-            int delay = randomBetween(packetDelayMin, packetDelayMax);
-            if (subTimer >= delay) {
-                if (mc().getConnection() != null) {
-                    mc().getConnection().sendPacket(
-                            new CPacketEntityAction(mc().player, CPacketEntityAction.Action.STOP_SPRINTING));
-                    mc().getConnection().sendPacket(
-                            new CPacketEntityAction(mc().player, CPacketEntityAction.Action.START_SPRINTING));
-                    mc().player.setSprinting(true);
+    // ── Packet mode ──────────────────────────────────────────────
+
+    private fun handlePacket() {
+        if (phase != 1) return
+        subTimer++
+        val delay = randomBetween(packetDelayMin, packetDelayMax) + packetDrift
+        if (subTimer >= delay.coerceAtLeast(0)) {
+            val conn = mc.connection ?: return
+            conn.sendPacket(CPacketEntityAction(mc.player, CPacketEntityAction.Action.STOP_SPRINTING))
+            conn.sendPacket(CPacketEntityAction(mc.player, CPacketEntityAction.Action.START_SPRINTING))
+            mc.player?.isSprinting = true
+            phase = 0
+        }
+    }
+
+    // ── SprintTap mode ───────────────────────────────────────────
+
+    private fun handleSprintTap() {
+        if (phase == 0) {
+            cancelSprint = false
+            return
+        }
+        when (phase) {
+            1 -> {
+                subTimer++
+                if (subTimer >= randomBetween(stopTicksMin, stopTicksMax) + sprintDrift) {
+                    phase = 2; subTimer = 0
                 }
-                phase = 0;
+            }
+            2 -> {
+                mc.player?.isSprinting = false
+                phase = 3; subTimer = 0
+            }
+            3 -> {
+                subTimer++
+                if (subTimer >= randomBetween(reSprintDelayMin, reSprintDelayMax) + sprintDrift) {
+                    phase = 0; cancelSprint = false
+                }
+            }
+        }
+        if (cancelSprint) mc.player?.isSprinting = false
+    }
+
+    // ── MoveBlock mode ───────────────────────────────────────────
+
+    private fun handleMoveBlock() {
+        if (phase == 0) {
+            blockMovement = false
+            return
+        }
+        when (phase) {
+            1 -> {
+                subTimer++
+                if (subTimer >= randomBetween(moveBlockStartMin, moveBlockStartMax)) {
+                    phase = 2; subTimer = 0; blockMovement = true
+                }
+            }
+            2 -> {
+                subTimer++
+                if (subTimer >= randomBetween(moveBlockDurationMin, moveBlockDurationMax)) {
+                    phase = 0; blockMovement = false
+                }
+            }
+        }
+        if (blockMovement) {
+            mc.player?.let {
+                it.motionX = 0.0
+                it.motionZ = 0.0
+                it.isSprinting = false
             }
         }
     }
 
-    private void handleSprintTap() {
-        if (phase == 0) {
-            cancelSprint = false;
-            return;
-        }
-        switch (phase) {
-            case 1:
-                subTimer++;
-                int wait = randomBetween(stopTicksMin, stopTicksMax);
-                if (subTimer >= wait) {
-                    phase = 2;
-                    subTimer = 0;
-                }
-                break;
-            case 2:
-                mc().player.setSprinting(false);
-                phase = 3;
-                subTimer = 0;
-                break;
-            case 3:
-                subTimer++;
-                int delay = randomBetween(reSprintDelayMin, reSprintDelayMax);
-                if (subTimer >= delay) {
-                    phase = 0;
-                    cancelSprint = false;
-                }
-                break;
-        }
-        if (cancelSprint && mc().player.isSprinting()) {
-            mc().player.setSprinting(false);
-        }
+    // ── Helpers ──────────────────────────────────────────────────
+
+    private fun randomBetween(min: NumberSetting, max: NumberSetting): Int {
+        val lo = min.value.toInt()
+        val hi = max.value.toInt()
+        return if (hi <= lo) lo else lo + random.nextInt(hi - lo + 1)
     }
 
-    private void handleMoveBlock() {
-        if (phase == 0) {
-            blockMovement = false;
-            return;
+    override fun getVisibleSettings(): MutableList<Setting> {
+        val f = mutableListOf<Setting>(mode, chance, hurtTimeThreshold,
+            onlyOnGround, onlyFacing, notInWater)
+        when (mode.value) {
+            "Packet"    -> { f += packetDelayMin; f += packetDelayMax }
+            "SprintTap" -> { f += stopTicksMin; f += stopTicksMax; f += reSprintDelayMin; f += reSprintDelayMax }
+            "MoveBlock" -> { f += moveBlockStartMin; f += moveBlockStartMax; f += moveBlockDurationMin; f += moveBlockDurationMax }
         }
-        switch (phase) {
-            case 1:
-                subTimer++;
-                int delay = randomBetween(moveBlockStartMin, moveBlockStartMax);
-                if (subTimer >= delay) {
-                    phase = 2;
-                    subTimer = 0;
-                    blockMovement = true;
-                }
-                break;
-            case 2:
-                subTimer++;
-                int dur = randomBetween(moveBlockDurationMin, moveBlockDurationMax);
-                if (subTimer >= dur) {
-                    phase = 0;
-                    blockMovement = false;
-                }
-                break;
-        }
-        if (blockMovement) {
-            mc().player.motionX = 0.0;
-            mc().player.motionZ = 0.0;
-            mc().player.setSprinting(false);
-        }
-    }
-
-    private int randomBetween(NumberSetting min, NumberSetting max) {
-        int lo = (int) min.getValue();
-        int hi = (int) max.getValue();
-        if (hi <= lo) return lo;
-        return lo + random.nextInt(hi - lo + 1);
-    }
-
-    @Override
-    public void onEnable() { reset(); }
-    @Override
-    public void onDisable() { reset(); }
-
-    private void reset() {
-        phase = 0; subTimer = 0;
-        cancelSprint = false; blockMovement = false;
-    }
-
-    @Override
-    public List<Setting> getVisibleSettings() {
-        List<Setting> f = new ArrayList<>();
-        f.add(mode); f.add(chance); f.add(hurtTimeThreshold);
-        f.add(onlyOnGround); f.add(onlyFacing); f.add(notInWater);
-        String m = mode.getValue();
-        switch (m) {
-            case "Packet":
-                f.add(packetDelayMin); f.add(packetDelayMax);
-                break;
-            case "SprintTap":
-                f.add(stopTicksMin); f.add(stopTicksMax);
-                f.add(reSprintDelayMin); f.add(reSprintDelayMax);
-                break;
-            case "MoveBlock":
-                f.add(moveBlockStartMin); f.add(moveBlockStartMax);
-                f.add(moveBlockDurationMin); f.add(moveBlockDurationMax);
-                break;
-        }
-        return f;
+        f += randomiseTimings
+        return f
     }
 }
