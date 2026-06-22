@@ -1,507 +1,474 @@
-package com.yourname.backtrack.gui;
+package com.yourname.backtrack.gui
 
-import com.yourname.backtrack.config.ConfigManager;
-import com.yourname.backtrack.hud.HudSettings;
-import com.yourname.backtrack.module.Category;
-import com.yourname.backtrack.module.Module;
-import com.yourname.backtrack.module.ModuleManager;
-import com.yourname.backtrack.setting.ActionSetting;
-import com.yourname.backtrack.setting.BooleanSetting;
-import com.yourname.backtrack.setting.ModeSetting;
-import com.yourname.backtrack.setting.NumberSetting;
-import com.yourname.backtrack.setting.Setting;
-import setting.SettingGroup;
-import net.minecraft.client.gui.Gui;
-import net.minecraft.client.gui.GuiScreen;
-import org.lwjgl.input.Keyboard;
-import org.lwjgl.input.Mouse;
-import org.lwjgl.opengl.GL11;
+import com.yourname.backtrack.config.ConfigManager
+import com.yourname.backtrack.hud.HudSettings
+import com.yourname.backtrack.module.Category
+import com.yourname.backtrack.module.Module
+import com.yourname.backtrack.module.ModuleManager
+import com.yourname.backtrack.setting.*
+import net.minecraft.client.gui.Gui
+import net.minecraft.client.gui.GuiScreen
+import org.lwjgl.input.Keyboard
+import org.lwjgl.input.Mouse
+import org.lwjgl.opengl.GL11
+import setting.SettingGroup
+import java.util.*
+import kotlin.math.*
 
-import java.io.IOException;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Locale;
-import java.util.Map;
+class ClickGuiScreen(
+    val moduleManager: ModuleManager,
+    val configManager: ConfigManager,
+    val hudSettings: HudSettings,
+    val guiTheme: GuiTheme
+) : GuiScreen() {
 
-public class ClickGuiScreen extends GuiScreen {
+    // ── Layout constants ───────────────────────────────────────────
+    private companion object {
+        const val PANEL_W   = 150
+        const val PANEL_GAP = 8
+        const val HEADER_H  = 16
+        const val MOD_H     = 14
+        const val SET_H     = 12
+        const val ROW_GAP   = 4
+        const val MAX_VIS_H = 240
 
-    private final ModuleManager  moduleManager;
-    private final ConfigManager  configManager;
-    private final HudSettings    hudSettings;
-    private final GuiTheme       guiTheme;
-    private final long           openTime;
+        // Slider fixed layout — never shifts regardless of value width
+        const val SLIDER_W        = 50
+        const val SLIDER_VAL_W    = 28   // reserved right-side area for value text
+        const val SLIDER_RIGHT_PAD = 4
+        // sliderX = panelX + PANEL_W - SLIDER_VAL_W - SLIDER_RIGHT_PAD - SLIDER_W
 
-    private static final int PANEL_W   = 150;
-    private static final int PANEL_GAP = 8;
-    private static final int HEADER_H  = 16;
-    private static final int MOD_H     = 14;
-    private static final int SET_H     = 12;
-    private static final int ROW_GAP   = 4;
-    private static final int MAX_VIS_H = 240;
+        // Colour palette
+        const val COLOR_BG        = 0xFF141414.toInt()
+        const val COLOR_HOVER     = 0xFF1C1C1C.toInt()
+        const val COLOR_OUTLINE   = 0xFF232323.toInt()
+        const val COLOR_ACCENT    = 0xFF4DA3FF.toInt()
+        const val COLOR_SLIDER_BG = 0xFF282828.toInt()
+        const val COLOR_TEXT      = 0xFFD2D2D2.toInt()
+        const val COLOR_TEXT_MOD  = 0xFFE1E1E1.toInt()
+        const val COLOR_TEXT_SET  = 0xFFBEBEBE.toInt()
+        const val COLOR_HEADER    = 0xFF181818.toInt()
+    }
 
-    // Fixed layout constants for slider — never shift regardless of value text width
-    private static final int SLIDER_W        = 50;
-    private static final int SLIDER_VAL_W    = 28; // reserved right-side width for value text
-    private static final int SLIDER_RIGHT_PAD = 4;
-    // sliderX = panelX + PANEL_W - SLIDER_VAL_W - SLIDER_RIGHT_PAD - SLIDER_W
+    // ── State ──────────────────────────────────────────────────────
+    private val openTime: Long = System.currentTimeMillis()
+    private val panels = mutableListOf<Panel>()
+    private val sliderAnimations = HashMap<NumberSetting, Double>()
 
-    private static final int COLOR_BG        = 0xFF141414;
-    private static final int COLOR_HOVER     = 0xFF1C1C1C;
-    private static final int COLOR_OUTLINE   = 0xFF232323;
-    private static final int COLOR_ACCENT    = 0xFF4DA3FF;
-    private static final int COLOR_SLIDER_BG = 0xFF282828;
-    private static final int COLOR_TEXT      = 0xFFD2D2D2;
-    private static final int COLOR_TEXT_MOD  = 0xFFE1E1E1;
-    private static final int COLOR_TEXT_SET  = 0xFFBEBEBE;
-    private static final int COLOR_HEADER    = 0xFF181818;
+    private var expandedModule: Module? = null
+    private var waitingForBind = false
+    private var draggingSlider = false
+    private var draggedSlider: NumberSetting? = null
+    private var draggedSliderX = 0
+    private var draggedSliderW = 0
 
-    private final List<Panel> panels = new ArrayList<>();
+    // ── Inner panel class ──────────────────────────────────────────
+    private inner class Panel(val category: Category, var x: Int, var y: Int) {
+        var collapsed = false
+        var scrollOffset = 0f         // animated value
+        var targetScrollOffset = 0f    // desired value set by mouse wheel
+        var dragging = false
+        var dragOffX = 0
+        var dragOffY = 0
+    }
 
-    private Module        expandedModule = null;
-    private boolean       waitingForBind = false;
-    private boolean       draggingSlider = false;
-    private NumberSetting draggedSlider  = null;
-    private int           draggedSliderX = 0;
-    private int           draggedSliderW = 0;
-    private final Map<NumberSetting, Double> sliderAnimations = new HashMap<>();
+    // ── Helpers ────────────────────────────────────────────────────
+    private fun Int.withAlpha(alpha: Int) = ((alpha and 0xFF) shl 24) or (this and 0x00FFFFFF)
 
-    private static class Panel {
-        final Category category;
-        int     x, y;
-        boolean collapsed    = false;
-        int     scrollOffset = 0;
-        boolean dragging     = false;
-        int     dragOffX, dragOffY;
-        Panel(Category category, int x, int y) {
-            this.category = category;
-            this.x = x;
-            this.y = y;
+    private val Int.animated: Int
+        get() {
+            val t = ((System.currentTimeMillis() - openTime) / 220f).coerceIn(0f, 1f)
+            val alpha = (this shr 24) and 0xFF
+            return ((alpha * t).toInt() shl 24) or (this and 0x00FFFFFF)
+        }
+
+    /** Fixed slider X position for a panel — independent of current value. */
+    private fun sliderX(panelX: Int) = panelX + PANEL_W - SLIDER_VAL_W - SLIDER_RIGHT_PAD - SLIDER_W
+
+    // ── Initialisation ─────────────────────────────────────────────
+    override fun initGui() {
+        panels.clear()
+        val count = Category.values().count { it != Category.HUD }
+        val totalW = count * PANEL_W + (count - 1) * PANEL_GAP
+        var startX = (width  - totalW) / 2
+        val startY =  height / 4
+        for (cat in Category.values()) {
+            if (cat == Category.HUD) continue
+            panels += Panel(cat, startX, startY)
+            startX += PANEL_W + PANEL_GAP
         }
     }
 
-    public ClickGuiScreen(ModuleManager moduleManager, ConfigManager configManager,
-                          HudSettings hudSettings, GuiTheme guiTheme) {
-        this.moduleManager = moduleManager;
-        this.configManager = configManager;
-        this.hudSettings   = hudSettings;
-        this.guiTheme      = guiTheme;
-        this.openTime      = System.currentTimeMillis();
-    }
-
-    public HudSettings getHudSettings() { return hudSettings; }
-
-    // Returns the fixed sliderX for a panel's x origin — stable regardless of current value.
-    private int sliderX(int panelX) {
-        return panelX + PANEL_W - SLIDER_VAL_W - SLIDER_RIGHT_PAD - SLIDER_W;
-    }
-
-    @Override
-    public void initGui() {
-        panels.clear();
-        int count = 0;
-        for (Category cat : Category.values()) {
-            if (cat != Category.HUD) count++;
+    // ── Drawing ────────────────────────────────────────────────────
+    override fun drawScreen(mouseX: Int, mouseY: Int, partialTicks: Float) {
+        for (panel in panels) {
+            // Smooth scroll animation (lerp toward target)
+            panel.scrollOffset += (panel.targetScrollOffset - panel.scrollOffset) * 0.3f
+            drawPanel(panel, mouseX, mouseY)
         }
-        int totalW = count * PANEL_W + (count - 1) * PANEL_GAP;
-        int startX = (width  - totalW) / 2;
-        int startY =  height / 4;
-        for (Category cat : Category.values()) {
-            if (cat == Category.HUD) continue;
-            panels.add(new Panel(cat, startX, startY));
-            startX += PANEL_W + PANEL_GAP;
-        }
+        super.drawScreen(mouseX, mouseY, partialTicks)
     }
 
-    @Override
-    public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        for (Panel panel : panels) drawPanel(panel, mouseX, mouseY);
-        super.drawScreen(mouseX, mouseY, partialTicks);
-    }
+    private fun drawPanel(panel: Panel, mouseX: Int, mouseY: Int) {
+        val x = panel.x
+        val y = panel.y
+        val contentH = if (panel.collapsed) 0 else getPanelContentHeight(panel)
+        val panelH   = HEADER_H + contentH
 
-    private void drawPanel(Panel panel, int mouseX, int mouseY) {
-        int x        = panel.x;
-        int y        = panel.y;
-        int contentH = panel.collapsed ? 0 : getPanelContentHeight(panel);
-        int panelH   = HEADER_H + contentH;
+        // Panel background & outline
+        Gui.drawRect(x, y, x + PANEL_W, y + panelH, COLOR_BG.withAlpha(245))
+        drawOutline(x, y, PANEL_W, panelH, COLOR_OUTLINE)
+        Gui.drawRect(x, y, x + PANEL_W, y + HEADER_H, COLOR_HEADER.withAlpha(250))
 
-        Gui.drawRect(x, y, x + PANEL_W, y + panelH, withAlpha(COLOR_BG, 245));
-        drawOutline(x, y, PANEL_W, panelH, COLOR_OUTLINE);
-        Gui.drawRect(x, y, x + PANEL_W, y + HEADER_H, withAlpha(COLOR_HEADER, 250));
-
-        String catName = panel.category.name().charAt(0)
-                + panel.category.name().substring(1).toLowerCase(Locale.ROOT);
+        // Category header
+        val catName = panel.category.name.lowercase(Locale.ROOT)
+            .replaceFirstChar { it.uppercase() }
         fontRenderer.drawStringWithShadow(catName,
-                x + PANEL_W / 2 - fontRenderer.getStringWidth(catName) / 2,
-                y + 4, COLOR_TEXT);
-        fontRenderer.drawStringWithShadow(panel.collapsed ? "+" : "-",
-                x + PANEL_W - 8, y + 4, withAlpha(COLOR_TEXT, 120));
+            x + PANEL_W / 2 - fontRenderer.getStringWidth(catName) / 2,
+            y + 4, COLOR_TEXT)
+        fontRenderer.drawStringWithShadow(if (panel.collapsed) "+" else "-",
+            x + PANEL_W - 8, y + 4, COLOR_TEXT.withAlpha(120))
 
-        int underlineWidth = (int)(PANEL_W * 0.6);
-        int underlineX = x + PANEL_W / 2 - underlineWidth / 2;
+        val underlineWidth = (PANEL_W * 0.6).toInt()
+        val underlineX = x + PANEL_W / 2 - underlineWidth / 2
         Gui.drawRect(underlineX, y + HEADER_H - 2, underlineX + underlineWidth, y + HEADER_H,
-                panel.collapsed ? COLOR_OUTLINE : COLOR_ACCENT);
+            if (panel.collapsed) COLOR_OUTLINE else COLOR_ACCENT)
 
-        if (panel.collapsed) return;
+        if (panel.collapsed) return
 
-        Gui.drawRect(x, y + HEADER_H, x + PANEL_W, y + HEADER_H + contentH, withAlpha(COLOR_BG, 250));
-        enableScissor(x, y + HEADER_H, PANEL_W, contentH);
+        // Content background
+        Gui.drawRect(x, y + HEADER_H, x + PANEL_W, y + HEADER_H + contentH,
+            COLOR_BG.withAlpha(250))
+        enableScissor(x, y + HEADER_H, PANEL_W, contentH)
 
-        int rowY = y + HEADER_H - panel.scrollOffset;
-        for (Module mod : getModulesForCategory(panel.category)) {
-            boolean inView = rowY + MOD_H >= y + HEADER_H && rowY < y + HEADER_H + contentH;
-            if (inView) drawModuleRow(x, rowY, mod, mouseX, mouseY);
-            rowY += MOD_H + ROW_GAP;
+        val scrollOff = panel.scrollOffset.toInt()
+        var rowY = y + HEADER_H - scrollOff
+        for (mod in getModulesForCategory(panel.category)) {
+            val inView = rowY + MOD_H >= y + HEADER_H && rowY < y + HEADER_H + contentH
+            if (inView) drawModuleRow(x, rowY, mod, mouseX, mouseY)
+            rowY += MOD_H + ROW_GAP
             if (mod == expandedModule) {
                 rowY = drawInlineSettings(x, rowY, mod, mouseX, mouseY,
-                        y + HEADER_H, y + HEADER_H + contentH);
+                    y + HEADER_H, y + HEADER_H + contentH)
             }
         }
 
-        GL11.glDisable(GL11.GL_SCISSOR_TEST);
+        GL11.glDisable(GL11.GL_SCISSOR_TEST)
     }
 
-    private void drawModuleRow(int x, int y, Module mod, int mouseX, int mouseY) {
-        boolean hov      = isHov(x, y, PANEL_W, MOD_H, mouseX, mouseY);
-        boolean expanded = mod == expandedModule;
-        int bg = expanded ? withAlpha(COLOR_HOVER, 255)
-                : hov     ? withAlpha(COLOR_HOVER, 200)
-                          : withAlpha(COLOR_BG, 255);
-        Gui.drawRect(x, y, x + PANEL_W, y + MOD_H, animated(bg));
-        if (mod.isEnabled()) Gui.drawRect(x, y, x + 1, y + MOD_H, COLOR_ACCENT);
-        int textColor = mod.isEnabled() ? COLOR_ACCENT
-                : expanded              ? COLOR_TEXT_MOD
-                                        : withAlpha(COLOR_TEXT_MOD, 180);
-        fontRenderer.drawStringWithShadow(mod.getName(), x + 6, y + 3, animated(textColor));
-        if (!mod.getSettings().isEmpty()) {
-            fontRenderer.drawStringWithShadow(expanded ? "\u2303" : "\u2304",
-                    x + PANEL_W - 8, y + 3, withAlpha(COLOR_TEXT, 100));
+    private fun drawModuleRow(x: Int, y: Int, mod: Module, mx: Int, my: Int) {
+        val hov      = isHov(x, y, PANEL_W, MOD_H, mx, my)
+        val expanded = mod == expandedModule
+        val bg = when {
+            expanded -> COLOR_HOVER
+            hov      -> COLOR_HOVER.withAlpha(200)
+            else     -> COLOR_BG
+        }
+        Gui.drawRect(x, y, x + PANEL_W, y + MOD_H, bg.animated)
+        if (mod.enabled) Gui.drawRect(x, y, x + 1, y + MOD_H, COLOR_ACCENT)
+
+        val textColor = when {
+            mod.enabled -> COLOR_ACCENT
+            expanded    -> COLOR_TEXT_MOD
+            else        -> COLOR_TEXT_MOD.withAlpha(180)
+        }
+        fontRenderer.drawStringWithShadow(mod.name, x + 6, y + 3, textColor.animated)
+
+        if (mod.settings.isNotEmpty()) {
+            fontRenderer.drawStringWithShadow(if (expanded) "\u2303" else "\u2304",
+                x + PANEL_W - 8, y + 3, COLOR_TEXT.withAlpha(100))
         }
     }
 
-    private int drawInlineSettings(int x, int startY, Module mod,
-                                   int mouseX, int mouseY,
-                                   int clipTop, int clipBot) {
-        int y = startY;
-        if (y + SET_H >= clipTop && y < clipBot) {
-            boolean hov   = isHov(x, y, PANEL_W, SET_H, mouseX, mouseY);
-            String bindTx = waitingForBind ? "PRESS KEY..." : mod.getKeyName();
-            drawSettingRow(x, y, "Bind", bindTx, 0, hov, COLOR_ACCENT);
-        }
-        y += SET_H + ROW_GAP;
+    private fun drawInlineSettings(x: Int, startY: Int, mod: Module,
+                                   mx: Int, my: Int, clipTop: Int, clipBot: Int): Int {
+        var y = startY
 
-        List<Setting> main = getMainSettings(mod);
-        for (int i = 0; i < main.size(); i++) {
-            Setting s = main.get(i);
-            if (y + SET_H >= clipTop && y < clipBot) {
-                boolean hov = isHov(x, y, PANEL_W, SET_H, mouseX, mouseY);
-                if (s instanceof NumberSetting) {
-                    drawNumberSettingSlider(x, y, (NumberSetting) s, hov);
-                } else {
-                    drawSettingRow(x, y, s.getName(), getSettingValueText(s), i + 1, hov, COLOR_ACCENT);
-                }
+        // Bind row
+        if (y + SET_H in clipTop..clipBot) {
+            val hov = isHov(x, y, PANEL_W, SET_H, mx, my)
+            drawSettingRow(x, y, "Bind", if (waitingForBind) "PRESS KEY..." else mod.keyName,
+                0, hov, COLOR_ACCENT)
+        }
+        y += SET_H + ROW_GAP
+
+        for ((idx, s) in getMainSettings(mod).withIndex()) {
+            if (y + SET_H in clipTop..clipBot) {
+                val hov = isHov(x, y, PANEL_W, SET_H, mx, my)
+                if (s is NumberSetting) drawNumberSettingSlider(x, y, s, hov)
+                else drawSettingRow(x, y, s.name, getSettingValueText(s), idx + 1, hov, COLOR_ACCENT)
             }
-            y += SET_H + ROW_GAP;
+            y += SET_H + ROW_GAP
         }
-        return y;
+        return y
     }
 
-    private void drawSettingRow(int x, int y, String left, String right,
-                                int rowIdx, boolean hov, int accent) {
-        int bg = hov ? withAlpha(COLOR_HOVER, 200) : withAlpha(COLOR_BG, 255);
-        Gui.drawRect(x, y, x + PANEL_W, y + SET_H, animated(bg));
-        Gui.drawRect(x, y, x + 2, y + SET_H, withAlpha(accent, hov ? 180 : 60));
-        int maxLeftW = PANEL_W - (right != null ? fontRenderer.getStringWidth(right) + 10 : 0) - 8;
-        String label = left;
-        while (label.length() > 1 && fontRenderer.getStringWidth(label) > maxLeftW)
-            label = label.substring(0, label.length() - 1);
-        fontRenderer.drawStringWithShadow(label, x + 6, y + 2, COLOR_TEXT_SET);
-        if (right != null && !right.isEmpty()) {
-            int rw = fontRenderer.getStringWidth(right);
-            int rColor = "ON".equals(right)           ? COLOR_ACCENT
-                    : "OFF".equals(right)          ? withAlpha(COLOR_TEXT, 100)
-                      : "PRESS KEY...".equals(right) ? COLOR_ACCENT
-                                                     : withAlpha(COLOR_TEXT, 140);
-            fontRenderer.drawStringWithShadow(right, x + PANEL_W - rw - 6, y + 2, rColor);
+    private fun drawSettingRow(x: Int, y: Int, left: String, right: String?,
+                               rowIdx: Int, hov: Boolean, accent: Int) {
+        val bg = if (hov) COLOR_HOVER.withAlpha(200) else COLOR_BG
+        Gui.drawRect(x, y, x + PANEL_W, y + SET_H, bg.animated)
+        Gui.drawRect(x, y, x + 2, y + SET_H, accent.withAlpha(if (hov) 180 else 60))
+
+        val maxLeftW = PANEL_W - (right?.let { fontRenderer.getStringWidth(it) + 10 } ?: 0) - 8
+        var label = left
+        while (label.length > 1 && fontRenderer.getStringWidth(label) > maxLeftW)
+            label = label.dropLast(1)
+        fontRenderer.drawStringWithShadow(label, x + 6, y + 2, COLOR_TEXT_SET)
+
+        if (!right.isNullOrEmpty()) {
+            val rw = fontRenderer.getStringWidth(right)
+            val rColor = when (right) {
+                "ON", "PRESS KEY..." -> COLOR_ACCENT
+                "OFF"                -> COLOR_TEXT.withAlpha(100)
+                else                 -> COLOR_TEXT.withAlpha(140)
+            }
+            fontRenderer.drawStringWithShadow(right, x + PANEL_W - rw - 6, y + 2, rColor)
         }
     }
 
-    private void drawNumberSettingSlider(int x, int y, NumberSetting ns, boolean hov) {
-        int bg = hov ? withAlpha(COLOR_HOVER, 200) : withAlpha(COLOR_BG, 255);
-        Gui.drawRect(x, y, x + PANEL_W, y + SET_H, animated(bg));
-        Gui.drawRect(x, y, x + 2, y + SET_H, withAlpha(COLOR_ACCENT, hov ? 180 : 60));
+    private fun drawNumberSettingSlider(x: Int, y: Int, ns: NumberSetting, hov: Boolean) {
+        val bg = if (hov) COLOR_HOVER.withAlpha(200) else COLOR_BG
+        Gui.drawRect(x, y, x + PANEL_W, y + SET_H, bg.animated)
+        Gui.drawRect(x, y, x + 2, y + SET_H, COLOR_ACCENT.withAlpha(if (hov) 180 else 60))
 
-        // Fixed-position slider — sliderX never depends on current value
-        int sx = sliderX(x);
-        int valAreaX = sx + SLIDER_W + SLIDER_RIGHT_PAD;
+        val sx = sliderX(x)
 
-        int maxLeftW = sx - x - 8;
-        String label = ns.getName();
-        while (label.length() > 1 && fontRenderer.getStringWidth(label) > maxLeftW)
-            label = label.substring(0, label.length() - 1);
-        fontRenderer.drawStringWithShadow(label, x + 6, y + 2, COLOR_TEXT_SET);
+        // Label (truncated if needed)
+        val maxLeftW = sx - x - 8
+        var label = ns.name
+        while (label.length > 1 && fontRenderer.getStringWidth(label) > maxLeftW)
+            label = label.dropLast(1)
+        fontRenderer.drawStringWithShadow(label, x + 6, y + 2, COLOR_TEXT_SET)
 
         // Slider bar
-        int sliderY = y + SET_H / 2 - 2;
-        double realPct = (ns.getValue() - ns.getMin()) / (ns.getMax() - ns.getMin());
-        Double animVal = sliderAnimations.get(ns);
-        if (animVal == null) { animVal = realPct; }
-        animVal = animVal + (realPct - animVal) * 0.2;
-        sliderAnimations.put(ns, animVal);
-        int fillW = (int)(SLIDER_W * animVal);
-        Gui.drawRect(sx, sliderY, sx + SLIDER_W, sliderY + 4, withAlpha(COLOR_SLIDER_BG, 255));
-        Gui.drawRect(sx, sliderY, sx + fillW,     sliderY + 4, COLOR_ACCENT);
+        val sliderY = y + SET_H / 2 - 2
+        val realPct = ((ns.value - ns.min) / (ns.max - ns.min)).coerceIn(0.0, 1.0)
+        val anim = sliderAnimations.getOrPut(ns) { realPct }
+        val smoothPct = anim + (realPct - anim) * 0.2
+        sliderAnimations[ns] = smoothPct
 
-        // Value text right-aligned in the reserved area
-        String valStr = String.format(Locale.US, "%.2f", ns.getValue());
-        int rw = fontRenderer.getStringWidth(valStr);
-        fontRenderer.drawStringWithShadow(valStr, x + PANEL_W - SLIDER_RIGHT_PAD - rw, y + 2, COLOR_TEXT);
+        val fillW = (SLIDER_W * smoothPct).toInt()
+        Gui.drawRect(sx, sliderY, sx + SLIDER_W, sliderY + 4, COLOR_SLIDER_BG)
+        Gui.drawRect(sx, sliderY, sx + fillW,     sliderY + 4, COLOR_ACCENT)
+
+        // Value text
+        val valStr = "%.2f".format(Locale.US, ns.value)
+        val rw = fontRenderer.getStringWidth(valStr)
+        fontRenderer.drawStringWithShadow(valStr, x + PANEL_W - SLIDER_RIGHT_PAD - rw, y + 2, COLOR_TEXT)
     }
 
-    @Override
-    protected void mouseClicked(int mouseX, int mouseY, int btn) throws IOException {
-        for (Panel panel : panels) {
-            if (handlePanelClick(panel, mouseX, mouseY, btn)) {
-                super.mouseClicked(mouseX, mouseY, btn);
-                return;
-            }
+    // ── Input ──────────────────────────────────────────────────────
+    override fun mouseClicked(mouseX: Int, mouseY: Int, button: Int) {
+        for (panel in panels) {
+            if (handlePanelClick(panel, mouseX, mouseY, button)) return
         }
-        super.mouseClicked(mouseX, mouseY, btn);
+        super.mouseClicked(mouseX, mouseY, button)
     }
 
-    @Override
-    protected void mouseClickMove(int mouseX, int mouseY, int btn, long time) {
-        for (Panel panel : panels) {
-            if (!panel.dragging) continue;
-            panel.x = Math.max(0, Math.min(width  - PANEL_W,  mouseX - panel.dragOffX));
-            panel.y = Math.max(0, Math.min(height - HEADER_H, mouseY - panel.dragOffY));
+    override fun mouseClickMove(mouseX: Int, mouseY: Int, button: Int, time: Long) {
+        for (panel in panels) {
+            if (!panel.dragging) continue
+            panel.x = (mouseX - panel.dragOffX).coerceIn(0, width  - PANEL_W)
+            panel.y = (mouseY - panel.dragOffY).coerceIn(0, height - HEADER_H)
         }
-        if (draggingSlider && draggedSlider != null && btn == 0) {
-            updateSliderFromMouse(draggedSlider, mouseX, draggedSliderX, draggedSliderW);
+        if (draggingSlider && button == 0) {
+            draggedSlider?.let { updateSliderFromMouse(it, mouseX, draggedSliderX, draggedSliderW) }
         }
-        super.mouseClickMove(mouseX, mouseY, btn, time);
+        super.mouseClickMove(mouseX, mouseY, button, time)
     }
 
-    private void updateSliderFromMouse(NumberSetting ns, int mouseX, int sliderX, int sliderW) {
-        double pct = (double)(mouseX - sliderX) / sliderW;
-        pct = Math.max(0, Math.min(1, pct));
-        double newValue = ns.getMin() + pct * (ns.getMax() - ns.getMin());
-        double step = ns.getIncrement();
-        if (step > 0) newValue = Math.round(newValue / step) * step;
-        ns.setValue(newValue);
+    private fun updateSliderFromMouse(ns: NumberSetting, mouseX: Int, sliderX: Int, sliderW: Int) {
+        val pct = ((mouseX - sliderX).toDouble() / sliderW).coerceIn(0.0, 1.0)
+        var newValue = ns.min + pct * (ns.max - ns.min)
+        val step = ns.increment
+        if (step > 0) newValue = round(newValue / step) * step
+        ns.value = newValue
     }
 
-    private boolean handlePanelClick(Panel panel, int mouseX, int mouseY, int btn) {
-        int x = panel.x;
-        int y = panel.y;
+    private fun handlePanelClick(panel: Panel, mx: Int, my: Int, btn: Int): Boolean {
+        val x = panel.x
+        val y = panel.y
 
-        // Header
-        if (isHov(x, y, PANEL_W, HEADER_H, mouseX, mouseY)) {
+        // Header click
+        if (isHov(x, y, PANEL_W, HEADER_H, mx, my)) {
             if (btn == 0) {
-                panel.dragging = true;
-                panel.dragOffX = mouseX - x;
-                panel.dragOffY = mouseY - y;
+                panel.dragging = true
+                panel.dragOffX = mx - x
+                panel.dragOffY = my - y
             } else if (btn == 1) {
-                panel.collapsed = !panel.collapsed;
+                panel.collapsed = !panel.collapsed
                 if (panel.collapsed && expandedModule != null
-                        && expandedModule.getCategory() == panel.category) {
-                    expandedModule = null;
-                    waitingForBind = false;
+                    && expandedModule!!.category == panel.category) {
+                    expandedModule = null
+                    waitingForBind = false
                 }
             }
-            return true;
+            return true
         }
 
-        if (panel.collapsed) return false;
+        if (panel.collapsed) return false
 
-        int contentH = getPanelContentHeight(panel);
-        if (!isHov(x, y + HEADER_H, PANEL_W, contentH, mouseX, mouseY)) return false;
+        val contentH = getPanelContentHeight(panel)
+        if (!isHov(x, y + HEADER_H, PANEL_W, contentH, mx, my)) return false
 
-        int rowY = y + HEADER_H - panel.scrollOffset;
-        for (Module mod : getModulesForCategory(panel.category)) {
-
+        val scrollOff = panel.scrollOffset.toInt()
+        var rowY = y + HEADER_H - scrollOff
+        for (mod in getModulesForCategory(panel.category)) {
             // Module row
-            if (isHov(x, rowY, PANEL_W, MOD_H, mouseX, mouseY)) {
-                if (btn == 0) mod.toggle();
+            if (isHov(x, rowY, PANEL_W, MOD_H, mx, my)) {
+                if (btn == 0) mod.toggle()
                 else if (btn == 1) {
-                    expandedModule = (expandedModule == mod) ? null : mod;
-                    waitingForBind = false;
+                    expandedModule = if (expandedModule == mod) null else mod
+                    waitingForBind = false
                 }
-                return true;
+                return true
             }
-            rowY += MOD_H + ROW_GAP;
-
-            if (mod != expandedModule) continue;
+            rowY += MOD_H + ROW_GAP
+            if (mod != expandedModule) continue
 
             // Bind row
-            if (isHov(x, rowY, PANEL_W, SET_H, mouseX, mouseY)) {
-                if (btn == 0) waitingForBind = !waitingForBind;
-                return true;
+            if (isHov(x, rowY, PANEL_W, SET_H, mx, my)) {
+                if (btn == 0) waitingForBind = !waitingForBind
+                return true
             }
-            rowY += SET_H + ROW_GAP;
+            rowY += SET_H + ROW_GAP
 
             // Settings rows
-            for (Setting s : getMainSettings(mod)) {
-                if (isHov(x, rowY, PANEL_W, SET_H, mouseX, mouseY)) {
-                    if (s instanceof NumberSetting) {
-                        // Only start drag if clicking within the slider bar area
-                        int sx = sliderX(x);
-                        if (btn == 0 && mouseX >= sx && mouseX < sx + SLIDER_W) {
-                            draggingSlider = true;
-                            draggedSlider  = (NumberSetting) s;
-                            draggedSliderX = sx;
-                            draggedSliderW = SLIDER_W;
-                            updateSliderFromMouse((NumberSetting) s, mouseX, sx, SLIDER_W);
+            for (s in getMainSettings(mod)) {
+                if (isHov(x, rowY, PANEL_W, SET_H, mx, my)) {
+                    if (s is NumberSetting) {
+                        val sx = sliderX(x)
+                        if (btn == 0 && mx in sx until sx + SLIDER_W) {
+                            draggingSlider = true
+                            draggedSlider  = s
+                            draggedSliderX = sx
+                            draggedSliderW = SLIDER_W
+                            updateSliderFromMouse(s, mx, sx, SLIDER_W)
                         }
-                        // Clicking label side of a NumberSetting row does nothing
                     } else {
-                        handleSettingClick(mod, s, btn);
+                        handleSettingClick(mod, s, btn)
                     }
-                    return true;
+                    return true
                 }
-                rowY += SET_H + ROW_GAP;
+                rowY += SET_H + ROW_GAP
             }
         }
-        return false;
+        return false
     }
 
-    @Override
-    public void handleMouseInput() throws IOException {
-        super.handleMouseInput();
-        int wheel = Mouse.getEventDWheel();
-        if (wheel == 0) return;
-        int mx = Mouse.getEventX()  * width  / mc.displayWidth;
-        int my = height - Mouse.getEventY() * height / mc.displayHeight - 1;
-        for (Panel panel : panels) {
-            int contentH = getPanelContentHeight(panel);
+    override fun handleMouseInput() {
+        super.handleMouseInput()
+        val wheel = Mouse.getEventDWheel()
+        if (wheel == 0) return
+
+        val mx = Mouse.getEventX()  * width  / mc.displayWidth
+        val my = height - Mouse.getEventY() * height / mc.displayHeight - 1
+
+        for (panel in panels) {
+            val contentH = getPanelContentHeight(panel)
             if (isHov(panel.x, panel.y + HEADER_H, PANEL_W, contentH, mx, my)) {
-                panel.scrollOffset += wheel > 0 ? -8 : 8;
-                if (panel.scrollOffset < 0) panel.scrollOffset = 0;
-                int maxScroll = Math.max(0, getPanelTotalRowHeight(panel) - contentH);
-                if (panel.scrollOffset > maxScroll) panel.scrollOffset = maxScroll;
-                break;
+                val maxScroll = max(0, getPanelTotalRowHeight(panel) - contentH)
+                panel.targetScrollOffset = (panel.targetScrollOffset + if (wheel > 0) -24 else 24)
+                    .coerceIn(0f, maxScroll.toFloat())
+                break
             }
         }
     }
 
-    @Override
-    protected void mouseReleased(int mouseX, int mouseY, int btn) {
-        if (btn == 0) {
-            for (Panel panel : panels) panel.dragging = false;
-            draggingSlider = false;
-            draggedSlider  = null;
-            draggedSliderX = 0;
-            draggedSliderW = 0;
+    override fun mouseReleased(mouseX: Int, mouseY: Int, button: Int) {
+        if (button == 0) {
+            for (panel in panels) panel.dragging = false
+            draggingSlider = false
+            draggedSlider  = null
+            draggedSliderX = 0
+            draggedSliderW = 0
         }
-        super.mouseReleased(mouseX, mouseY, btn);
+        super.mouseReleased(mouseX, mouseY, button)
     }
 
-    @Override
-    protected void keyTyped(char typed, int keyCode) throws IOException {
+    override fun keyTyped(typed: Char, keyCode: Int) {
         if (waitingForBind && expandedModule != null) {
-            expandedModule.setKeyCode(
-                    keyCode == Keyboard.KEY_ESCAPE ? Keyboard.KEY_NONE : keyCode);
-            waitingForBind = false;
-            return;
+            expandedModule!!.keyCode = if (keyCode == Keyboard.KEY_ESCAPE) Keyboard.KEY_NONE else keyCode
+            waitingForBind = false
+            return
         }
         if (keyCode == Keyboard.KEY_ESCAPE) {
-            saveAndClose();
-            return;
+            saveAndClose()
+            return
         }
-        super.keyTyped(typed, keyCode);
+        super.keyTyped(typed, keyCode)
     }
 
-    private void saveAndClose() {
-        if (!panels.isEmpty()) configManager.saveGuiPosition(panels.get(0).x, panels.get(0).y);
-        mc.displayGuiScreen(null);
+    private fun saveAndClose() {
+        if (panels.isNotEmpty()) configManager.saveGuiPosition(panels[0].x, panels[0].y)
+        mc.displayGuiScreen(null)
     }
 
-    private int getPanelTotalRowHeight(Panel panel) {
-        int h = 0;
-        for (Module mod : getModulesForCategory(panel.category)) {
-            h += MOD_H + ROW_GAP;
+    // ── Layout calculations ────────────────────────────────────────
+    private fun getPanelTotalRowHeight(panel: Panel): Int {
+        var h = 0
+        for (mod in getModulesForCategory(panel.category)) {
+            h += MOD_H + ROW_GAP
             if (mod == expandedModule) {
-                h += (1 + getMainSettings(mod).size()) * (SET_H + ROW_GAP);
+                h += (1 + getMainSettings(mod).size) * (SET_H + ROW_GAP)
             }
         }
-        return h;
+        return h
     }
 
-    private int getPanelContentHeight(Panel panel) {
-        return Math.min(getPanelTotalRowHeight(panel), MAX_VIS_H);
-    }
+    private fun getPanelContentHeight(panel: Panel) = min(getPanelTotalRowHeight(panel), MAX_VIS_H)
 
-    private List<Module> getModulesForCategory(Category cat) {
-        List<Module> result = new ArrayList<>();
-        for (Module m : moduleManager.getModules())
-            if (m.getCategory() == cat) result.add(m);
-        return result;
-    }
+    // ── Module / setting queries ───────────────────────────────────
+    private fun getModulesForCategory(cat: Category) =
+        moduleManager.modules.filter { it.category == cat }
 
-    private List<Setting> getMainSettings(Module mod) {
-        List<Setting> result = new ArrayList<>();
-        for (Setting s : mod.getVisibleSettings()) {
-            if (s.getGroup() != SettingGroup.HUDTEXT
-                    && s.getGroup() != SettingGroup.DEBUG_WINDOW)
-                result.add(s);
+    private fun getMainSettings(mod: Module): List<Setting> =
+        mod.visibleSettings.filter {
+            it.group != SettingGroup.HUDTEXT && it.group != SettingGroup.DEBUG_WINDOW
         }
-        return result;
-    }
 
-    private void handleSettingClick(Module mod, Setting s, int btn) {
-        if (s instanceof BooleanSetting)     ((BooleanSetting) s).toggle();
-        else if (s instanceof ModeSetting)   ((ModeSetting) s).cycle();
-        else if (s instanceof NumberSetting) {
-            if (btn == 0) ((NumberSetting) s).increase();
-            else          ((NumberSetting) s).decrease();
-        } else if (s instanceof ActionSetting) {
-            ((ActionSetting) s).trigger(
-                    new ActionSetting.ActionContext(this, moduleManager, configManager, guiTheme));
+    // ── Setting interaction ────────────────────────────────────────
+    private fun handleSettingClick(mod: Module, s: Setting, btn: Int) {
+        when (s) {
+            is BooleanSetting -> s.toggle()
+            is ModeSetting    -> s.cycle()
+            is NumberSetting  -> if (btn == 0) s.increase() else s.decrease()
+            is ActionSetting  -> s.trigger(ActionContext(this, moduleManager, configManager, guiTheme))
         }
-        configManager.saveModuleSettings(moduleManager);
-        configManager.saveModuleHudSettings(moduleManager);
+        configManager.saveModuleSettings(moduleManager)
+        configManager.saveModuleHudSettings(moduleManager)
     }
 
-    private boolean isHov(int x, int y, int w, int h, int mx, int my) {
-        return mx >= x && mx < x + w && my >= y && my < y + h;
+    // ── Generic helpers ────────────────────────────────────────────
+    private fun isHov(x: Int, y: Int, w: Int, h: Int, mx: Int, my: Int) =
+        mx in x until x + w && my in y until y + h
+
+    private fun drawOutline(x: Int, y: Int, w: Int, h: Int, color: Int) {
+        Gui.drawRect(x,         y,         x + w,     y + 1,     color)
+        Gui.drawRect(x,         y + h - 1, x + w,     y + h,     color)
+        Gui.drawRect(x,         y,         x + 1,     y + h,     color)
+        Gui.drawRect(x + w - 1, y,         x + w,     y + h,     color)
     }
 
-    private void drawOutline(int x, int y, int w, int h, int color) {
-        Gui.drawRect(x,         y,         x + w,     y + 1,     color);
-        Gui.drawRect(x,         y + h - 1, x + w,     y + h,     color);
-        Gui.drawRect(x,         y,         x + 1,     y + h,     color);
-        Gui.drawRect(x + w - 1, y,         x + w,     y + h,     color);
-    }
-
-    private void enableScissor(int x, int y, int w, int h) {
-        double scaleX = (double) mc.displayWidth  / width;
-        double scaleY = (double) mc.displayHeight / height;
-        GL11.glEnable(GL11.GL_SCISSOR_TEST);
+    private fun enableScissor(x: Int, y: Int, w: Int, h: Int) {
+        val scaleX = mc.displayWidth.toDouble()  / width
+        val scaleY = mc.displayHeight.toDouble() / height
+        GL11.glEnable(GL11.GL_SCISSOR_TEST)
         GL11.glScissor(
-                (int)(x * scaleX),
-                (int)(mc.displayHeight - (y + h) * scaleY),
-                (int)(w * scaleX),
-                (int)(h * scaleY));
+            (x * scaleX).toInt(),
+            (mc.displayHeight - (y + h) * scaleY).toInt(),
+            (w * scaleX).toInt(),
+            (h * scaleY).toInt()
+        )
     }
 
-    private int animated(int color) {
-        float p = Math.min(1.0f, (System.currentTimeMillis() - openTime) / 220.0f);
-        int alpha = (color >> 24) & 0xFF;
-        return ((int)(alpha * p) << 24) | (color & 0x00FFFFFF);
+    private fun getSettingValueText(s: Setting): String = when (s) {
+        is BooleanSetting -> if (s.value) "ON" else "OFF"
+        is NumberSetting  -> "%.2f".format(Locale.US, s.value)
+        is ModeSetting    -> s.value
+        is ActionSetting  -> ">"
+        else              -> ""
     }
 
-    private String getSettingValueText(Setting s) {
-        if (s instanceof BooleanSetting) return ((BooleanSetting) s).getValue() ? "ON" : "OFF";
-        if (s instanceof NumberSetting)  return String.format(Locale.US, "%.2f", ((NumberSetting) s).getValue());
-        if (s instanceof ModeSetting)    return ((ModeSetting) s).getValue();
-        if (s instanceof ActionSetting)  return ">";
-        return "";
-    }
-
-    private int withAlpha(int color, int alpha) {
-        return (alpha << 24) | (color & 0x00FFFFFF);
-    }
-
-    @Override
-    public boolean doesGuiPauseGame() { return false; }
+    override fun doesGuiPauseGame() = false
 }
