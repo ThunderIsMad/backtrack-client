@@ -1,30 +1,21 @@
-package com.yourname.backtrack.setting;
+package com.yourname.backtrack.setting
 
-import setting.SettingGroup;
+import setting.SettingGroup
 
-public class BooleanSetting extends Setting {
+open class BooleanSetting(
+    name: String,
+    defaultValue: Boolean = false,
+    group: SettingGroup = SettingGroup.MAIN
+) : Setting(name, group) {
 
-    private boolean value;
+    var value: Boolean = defaultValue
+        protected set
 
-    public BooleanSetting(String name, boolean defaultValue) {
-        this(name, defaultValue, SettingGroup.MAIN);
+    open fun toggle() {
+        value = !value
     }
 
-    public BooleanSetting(String name, boolean defaultValue, SettingGroup group) {
-        super(name, group);
-        this.value = defaultValue;
-    }
-
-    public boolean getValue() {
-        return value;
-    }
-
-    public void setValue(boolean value) {
-        this.value = value;
-    }
-
-    public void toggle() {
-        this.value = !this.value;
-    }
+    // Backwards-compat for Java callers
+    fun getValue(): Boolean = value
+    fun setValue(v: Boolean) { value = v }
 }
-
