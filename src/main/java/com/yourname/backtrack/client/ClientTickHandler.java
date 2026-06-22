@@ -1,5 +1,6 @@
 package com.yourname.backtrack.client;
 
+import com.yourname.backtrack.util.FlagLogger;
 import net.minecraft.client.Minecraft;
 import net.minecraftforge.fml.common.eventhandler.EventPriority;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
@@ -32,6 +33,9 @@ public class ClientTickHandler {
             // Only update onGround, nothing else.
             sim.updateOnGround(mc);
             sim.prepareNextTick();
+
+            // Detect silent motion corrections while in velocity window
+            FlagLogger.INSTANCE.tickCheck(mc);
             return;
         }
 
@@ -40,5 +44,8 @@ public class ClientTickHandler {
         sim.advanceVerifiedFromPlayer(mc);
         sim.updateOnGround(mc);
         sim.prepareNextTick();
+
+        // Always run tick-based checks (sprint resets, motion corrections)
+        FlagLogger.INSTANCE.tickCheck(mc);
     }
 }
