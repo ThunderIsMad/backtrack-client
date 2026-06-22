@@ -1,29 +1,24 @@
-package com.yourname.backtrack.module.impl;
+package com.yourname.backtrack.module.impl
 
-import com.yourname.backtrack.module.Category;
-import com.yourname.backtrack.module.Module;
-import net.minecraft.client.gui.GuiGameOver;
-import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
-import net.minecraftforge.fml.common.gameevent.TickEvent;
-import org.lwjgl.input.Keyboard;
+import com.yourname.backtrack.module.Category
+import com.yourname.backtrack.module.Module
+import net.minecraft.client.gui.GuiGameOver
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent
+import net.minecraftforge.fml.common.gameevent.TickEvent
+import org.lwjgl.input.Keyboard
 
-public class AutoRespawnModule extends Module {
+class AutoRespawnModule : Module("AutoRespawn", Category.MISC, Keyboard.KEY_NONE) {
 
-    public AutoRespawnModule() {
-        super("AutoRespawn", Category.MISC, Keyboard.KEY_NONE);
-        addHudSettings();
-    }
+    init { addHudSettings() }
 
     @SubscribeEvent
-    public void onClientTick(TickEvent.ClientTickEvent event) {
-        if (event.phase != TickEvent.Phase.START) return;
-        if (!isEnabled() || mc().player == null) {
-            return;
-        }
+    fun onClientTick(event: TickEvent.ClientTickEvent) {
+        if (event.phase != TickEvent.Phase.START) return
+        if (!isEnabled) return
 
-        if (mc().currentScreen instanceof GuiGameOver) {
-            mc().player.respawnPlayer();
-            mc().displayGuiScreen(null);
+        if (mc.currentScreen is GuiGameOver) {
+            mc.player?.respawnPlayer()
+            mc.displayGuiScreen(null)
         }
     }
 }
