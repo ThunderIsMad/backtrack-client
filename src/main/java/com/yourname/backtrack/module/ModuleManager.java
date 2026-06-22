@@ -1,66 +1,50 @@
-package com.yourname.backtrack.module;
+package com.yourname.backtrack.module
 
-import com.yourname.backtrack.input.KeybindHandler;
-import com.yourname.backtrack.module.impl.AutoClickerModule;
-import com.yourname.backtrack.module.impl.AutoRespawnModule;
-import com.yourname.backtrack.module.impl.AutoSprintModule;
-import com.yourname.backtrack.module.impl.FullBrightModule;
-import com.yourname.backtrack.module.impl.KeepSprintModule;
-import com.yourname.backtrack.module.impl.VelocityModule;
-import com.yourname.backtrack.module.impl.WTapModule;
-import net.minecraft.client.Minecraft;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.client.registry.ClientRegistry;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import com.yourname.backtrack.input.KeybindHandler
+import com.yourname.backtrack.module.impl.*
+import net.minecraft.client.Minecraft
+import net.minecraftforge.common.MinecraftForge
+import net.minecraftforge.fml.client.registry.ClientRegistry
 
-public class ModuleManager {
+class ModuleManager {
 
-    private KeybindHandler keybindHandler;
+    var keybindHandler: KeybindHandler? = null
 
-    public void setKeybindHandler(KeybindHandler h) { this.keybindHandler = h; }
+    private val _modules = mutableListOf<Module>()
+    val modules: List<Module> get() = _modules
 
-    private final List<Module> modules = new ArrayList<>();
-
-    public ModuleManager() {
-        registerModule(new AutoSprintModule());
-        registerModule(new FullBrightModule());
-        registerModule(new AutoRespawnModule());
-        registerModule(new KeepSprintModule());
-        registerModule(new WTapModule());
-        registerModule(new AutoClickerModule());
-        registerModule(new VelocityModule());
+    init {
+        // Register order determines default HUD vertical positions
+        listOf(
+            ::AutoSprintModule,
+            ::FullBrightModule,
+            ::AutoRespawnModule,
+            ::KeepSprintModule,
+            ::WTapModule,
+            ::AutoClickerModule,
+            ::VelocityModule
+        ).forEach { constructor -> registerModule(constructor()) }
     }
 
-    private void registerModule(Module module) {
-        module.getHudSettings().setDefaultPosition(5, 5 + modules.size() * 14);
-        modules.add(module);
-        ClientRegistry.registerKeyBinding(module.getKeyBinding());
-        MinecraftForge.EVENT_BUS.register(module);
+    private fun registerModule(module: Module) {
+        module.hudSettings.setDefaultPosition(5, 5 + _modules.size * 14)
+        _modules += module
+        ClientRegistry.registerKeyBinding(module.keyBinding)
+        MinecraftForge.EVENT_BUS.register(module)
     }
 
-    public List<Module> getModules() {
-        return Collections.unmodifiableList(modules);
-    }
+    @Suppress("UNCHECKED_CAST")
+    fun <T : Module> getModule(clazz: Class<T>): T? =
+        _modules.firstOrNull { clazz.isInstance(it) } as? T
 
-    public <T extends Module> T getModule(Class<T> clazz) {
-        for (Module m : modules) {
-            if (clazz.isInstance(m)) return clazz.cast(m);
-        }
-        return null;
-    }
+    fun onTick() {
+        if (Minecraft.getMinecraft().player == null) return
 
-    public void onTick() {
-        if (Minecraft.getMinecraft().player == null) return;
+        keybindHandler?.onTick()
 
-        if (keybindHandler != null) {
-            keybindHandler.onTick();
-        }
-
-        for (Module module : modules) {
-            if (module.isEnabled()) {
-                module.onClientTick();
+        for (module in _modules) {
+            if (module.isEnabled) {
+                module.onClientTick()
             }
         }
     }
