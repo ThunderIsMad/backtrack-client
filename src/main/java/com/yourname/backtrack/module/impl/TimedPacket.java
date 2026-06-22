@@ -1,23 +1,10 @@
-package com.yourname.backtrack.module.impl;
+package com.yourname.backtrack.module.impl
 
-import net.minecraft.network.Packet;
+import net.minecraft.network.Packet
 
-public class TimedPacket {
-
-    private final Packet<?> packet;
-    private final long timestamp;
-
-    public TimedPacket(Packet<?> packet) {
-        this.packet = packet;
-        this.timestamp = System.currentTimeMillis();
-    }
-
-    public Packet<?> getPacket() {
-        return packet;
-    }
-
-    public boolean hasExpired(long delayMs) {
-        return System.currentTimeMillis() - timestamp >= delayMs;
-    }
+data class TimedPacket(
+    val packet: Packet<*>,
+    private val timestamp: Long = System.currentTimeMillis()
+) {
+    fun hasExpired(delayMs: Long): Boolean = System.currentTimeMillis() - timestamp >= delayMs
 }
-
