@@ -1,80 +1,69 @@
-package com.yourname.backtrack;
+package com.yourname.backtrack
 
-import com.yourname.backtrack.config.ConfigManager;
-import com.yourname.backtrack.gui.GuiOpener;
-import com.yourname.backtrack.gui.GuiTheme;
-import com.yourname.backtrack.hud.HudControlHandler;
-import com.yourname.backtrack.hud.HudRenderer;
-import com.yourname.backtrack.hud.HudSettings;
-import com.yourname.backtrack.util.IntaveChatLogger;
-import com.yourname.backtrack.input.KeybindHandler;
-import com.yourname.backtrack.module.ModuleManager;
-import com.yourname.backtrack.client.ClientSimulator;
-import com.yourname.backtrack.client.ClientTickHandler;
-import com.yourname.backtrack.client.SimDebug;
-import com.yourname.backtrack.client.SimLifecycle;
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.fml.common.Mod;
-import net.minecraftforge.fml.common.event.FMLInitializationEvent;
-import net.minecraftforge.fml.common.event.FMLPostInitializationEvent;
+import com.yourname.backtrack.client.ClientSimulator
+import com.yourname.backtrack.client.ClientTickHandler
+import com.yourname.backtrack.client.SimDebug
+import com.yourname.backtrack.client.SimLifecycle
+import com.yourname.backtrack.config.ConfigManager
+import com.yourname.backtrack.gui.GuiOpener
+import com.yourname.backtrack.gui.GuiTheme
+import com.yourname.backtrack.hud.HudControlHandler
+import com.yourname.backtrack.hud.HudRenderer
+import com.yourname.backtrack.hud.HudSettings
+import com.yourname.backtrack.input.KeybindHandler
+import com.yourname.backtrack.module.ModuleManager
+import com.yourname.backtrack.util.IntaveChatLogger
+import net.minecraftforge.common.MinecraftForge
+import net.minecraftforge.fml.common.Mod
+import net.minecraftforge.fml.common.event.FMLInitializationEvent
+import net.minecraftforge.fml.common.event.FMLPostInitializationEvent
 
 @Mod(modid = "solobacktrack", name = "Solo Backtrack", version = "1.0")
-public class SoloBacktrack {
+object SoloBacktrack {
 
-    private static SoloBacktrack instance;
-    private ModuleManager moduleManager;
-    private HudSettings hudSettings;
-    private ConfigManager configManager;
-    private GuiTheme guiTheme;
+    lateinit var moduleManager: ModuleManager
+        private set
+    lateinit var hudSettings: HudSettings
+        private set
+    lateinit var configManager: ConfigManager
+        private set
+    lateinit var guiTheme: GuiTheme
+        private set
 
-    public static SoloBacktrack getInstance() {
-        return instance;
-    }
-
-    public ModuleManager getModuleManager() {
-        return moduleManager;
-    }
-
-    public HudSettings getHudSettings() {
-        return hudSettings;
-    }
-
-    public ConfigManager getConfigManager() {
-        return configManager;
+    @Mod.EventHandler
+    fun init(event: FMLInitializationEvent) {
+        // Instance is now 'this' (Kotlin object)
     }
 
     @Mod.EventHandler
-    public void init(FMLInitializationEvent event) {
-        instance = this;
-    }
+    fun postInit(event: FMLPostInitializationEvent) {
+        moduleManager = ModuleManager()
+        hudSettings = HudSettings()
+        configManager = ConfigManager()
+        guiTheme = GuiTheme()
 
-    @Mod.EventHandler
-    public void postInit(FMLPostInitializationEvent event) {
-        moduleManager = new ModuleManager();
-        hudSettings = new HudSettings();
-        configManager = new ConfigManager();
-        guiTheme = new GuiTheme();
+        with(configManager) {
+            loadHudSettings(hudSettings)
+            loadModuleKeybinds(moduleManager)
+            loadModuleSettings(moduleManager)
+            loadModuleHudSettings(moduleManager)
+            loadModuleStates(moduleManager)
+        }
 
-        configManager.loadHudSettings(hudSettings);
-        configManager.loadModuleKeybinds(moduleManager);
-        configManager.loadModuleSettings(moduleManager);
-        configManager.loadModuleHudSettings(moduleManager);
-        configManager.loadModuleStates(moduleManager);
+        val keybindHandler = KeybindHandler(moduleManager, configManager)
+        moduleManager.keybindHandler = keybindHandler
+        MinecraftForge.EVENT_BUS.register(keybindHandler)
 
-        final KeybindHandler keybindHandler = new KeybindHandler(moduleManager, configManager);
-        moduleManager.setKeybindHandler(keybindHandler);
-        MinecraftForge.EVENT_BUS.register(keybindHandler);
-
-        MinecraftForge.EVENT_BUS.register(new HudRenderer(moduleManager, hudSettings));
-        MinecraftForge.EVENT_BUS.register(new HudControlHandler(hudSettings, configManager));
-        MinecraftForge.EVENT_BUS.register(new GuiOpener(moduleManager, configManager, hudSettings, guiTheme));
-        MinecraftForge.EVENT_BUS.register(new IntaveChatLogger());
-        MinecraftForge.EVENT_BUS.register(new ClientTickHandler());
-        MinecraftForge.EVENT_BUS.register(new SimLifecycle());
+        MinecraftForge.EVENT_BUS.register(HudRenderer(moduleManager, hudSettings))
+        MinecraftForge.EVENT_BUS.register(HudControlHandler(hudSettings, configManager))
+        MinecraftForge.EVENT_BUS.register(GuiOpener(moduleManager, configManager, hudSettings, guiTheme))
+        MinecraftForge.EVENT_BUS.register(IntaveChatLogger())
+        MinecraftForge.EVENT_BUS.register(ClientTickHandler())
+        MinecraftForge.EVENT_BUS.register(SimLifecycle)
 
         // Load simulator settings
-        ClientSimulator.INSTANCE.shadowMode = configManager.loadSimulatorShadow();
-        SimDebug.enabled = configManager.loadSimulatorDebug();
-        SimDebug.logToChat = configManager.loadSimulatorDebugChat();
+        ClientSimulator.shadowMode = configManager.loadSimulatorShadow()
+        SimDebug.enabled = configManager.loadSimulatorDebug()
+        SimDebug.logToChat = configManager.loadSimulatorDebugChat()
     }
 }
