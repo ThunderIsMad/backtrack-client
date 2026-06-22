@@ -1,149 +1,68 @@
-package com.yourname.backtrack.module;
+package com.yourname.backtrack.module
 
-public class ModuleHudSettings {
+import net.minecraft.util.math.MathHelper
+import kotlin.math.abs
 
-    private final String moduleName;
+class ModuleHudSettings(val moduleName: String) {
 
-    private int x = 5;
-    private int y = 5;
-
-    private int defaultX = 5;
-    private int defaultY = 5;
-
-    private boolean visible = true;
-    private boolean shadow = true;
-    private boolean background = false;
-
-    private int colorIndex = 0;
-
-    public ModuleHudSettings(String moduleName) {
-        this.moduleName = moduleName;
+    // ── Built-in color palette ──────────────────────────────────
+    enum class HudColor(val hex: Int, val displayName: String) {
+        BLUE(   0x4AA3FF, "Blue"),
+        CYAN(   0x3DE1D5, "Cyan"),
+        PURPLE( 0x9B59FF, "Purple"),
+        GREEN(  0x4CD964, "Green"),
+        RED(    0xFF5A6A, "Red"),
+        GOLD(   0xFFB347, "Gold"),
+        WHITE(  0xFFFFFF, "White"),
+        RAINBOW(-1,       "Rainbow")
     }
 
-    public String getModuleName() {
-        return moduleName;
+    var x = 5
+    var y = 5
+
+    private var defaultX = 5
+    private var defaultY = 5
+
+    var visible    = true
+    var shadow     = true
+    var background = false
+
+    var colorIndex = 0
+        set(value) { field = value.coerceIn(0, HudColor.values().size - 1) }
+
+    val color: HudColor
+        get() = HudColor.values().getOrElse(colorIndex) { HudColor.BLUE }
+
+    val colorName: String
+        get() = color.displayName
+
+    /** Returns the actual ARGB colour, computing rainbow if needed. */
+    fun getTextColor(): Int {
+        val base = color
+        if (base != HudColor.RAINBOW) return base.hex
+
+        // Classic cycling rainbow — offset = time / 10
+        val offset = (System.currentTimeMillis() / 10).toInt()
+        val hue = (offset % 360).toFloat() / 360f
+        return java.awt.Color.HSBtoRGB(hue, 1f, 1f) and 0xFFFFFF
     }
 
-    public int getX() {
-        return x;
+    // ── Convenience toggles ────────────────────────────────────
+    fun toggleVisible()    { visible    = !visible }
+    fun toggleShadow()     { shadow     = !shadow }
+    fun toggleBackground() { background = !background }
+
+    fun cycleColor() {
+        val total = HudColor.values().size
+        colorIndex = (colorIndex + 1) % total
     }
 
-    public void setX(int x) {
-        this.x = x;
+    fun setDefaultPosition(x: Int, y: Int) {
+        defaultX = x; defaultY = y
+        this.x = x; this.y = y
     }
 
-    public int getY() {
-        return y;
-    }
-
-    public void setY(int y) {
-        this.y = y;
-    }
-
-    public int getDefaultX() {
-        return defaultX;
-    }
-
-    public int getDefaultY() {
-        return defaultY;
-    }
-
-    public boolean isVisible() {
-        return visible;
-    }
-
-    public void setVisible(boolean visible) {
-        this.visible = visible;
-    }
-
-    public void toggleVisible() {
-        visible = !visible;
-    }
-
-    public boolean isShadow() {
-        return shadow;
-    }
-
-    public void setShadow(boolean shadow) {
-        this.shadow = shadow;
-    }
-
-    public void toggleShadow() {
-        shadow = !shadow;
-    }
-
-    public boolean isBackground() {
-        return background;
-    }
-
-    public void setBackground(boolean background) {
-        this.background = background;
-    }
-
-    public void toggleBackground() {
-        background = !background;
-    }
-
-    public int getColorIndex() {
-        return colorIndex;
-    }
-
-    public void setColorIndex(int colorIndex) {
-        this.colorIndex = (colorIndex < 0 || colorIndex > 5) ? 0 : colorIndex;
-    }
-
-    public void cycleColor() {
-        colorIndex++;
-
-        if (colorIndex > 5) {
-            colorIndex = 0;
-        }
-    }
-
-    public void setDefaultPosition(int x, int y) {
-        this.defaultX = x;
-        this.defaultY = y;
-        this.x = x;
-        this.y = y;
-    }
-
-    public void resetToDefault() {
-        this.x = defaultX;
-        this.y = defaultY;
-    }
-
-    public String getColorName() {
-        switch (colorIndex) {
-            case 1:
-                return "CYAN";
-            case 2:
-                return "PURPLE";
-            case 3:
-                return "GREEN";
-            case 4:
-                return "RED";
-            case 5:
-                return "GOLD";
-            default:
-                return "BLUE";
-        }
-    }
-
-    public int getTextColor() {
-        switch (colorIndex) {
-            case 1:
-                return 0x3DE1D5;
-            case 2:
-                return 0x9B59FF;
-            case 3:
-                return 0x4CD964;
-            case 4:
-                return 0xFF5A6A;
-            case 5:
-                return 0xFFB347;
-            default:
-                return 0x4AA3FF;
-        }
+    fun resetToDefault() {
+        x = defaultX; y = defaultY
     }
 }
-
