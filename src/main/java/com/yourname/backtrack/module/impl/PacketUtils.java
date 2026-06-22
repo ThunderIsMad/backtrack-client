@@ -1,60 +1,62 @@
-package com.yourname.backtrack.module.impl;
+package com.yourname.backtrack.module.impl
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.network.INetHandler;
-import net.minecraft.network.Packet;
-import net.minecraft.network.play.client.CPacketEntityAction;
-import net.minecraft.network.play.client.CPacketPlayer;
+import net.minecraft.client.Minecraft
+import net.minecraft.network.INetHandler
+import net.minecraft.network.Packet
+import net.minecraft.network.play.client.CPacketEntityAction
+import net.minecraft.network.play.client.CPacketPlayer
 
-public class PacketUtils {
+/**
+ * Stateless packet helpers.  Every method requires a valid connection
+ * or player and silently returns otherwise.
+ */
+object PacketUtils {
 
-    private static Minecraft mc() {
-        return Minecraft.getMinecraft();
-    }
-
-    public static void receivePacket(Packet<?> packet) {
-        if (mc().getConnection() == null) return;
+    @JvmStatic
+    fun receivePacket(packet: Packet<*>) {
+        val conn = Minecraft.getMinecraft().connection ?: return
         try {
-            ((Packet<INetHandler>) packet).processPacket(mc().getConnection());
-        } catch (Exception ignored) {}
+            @Suppress("UNCHECKED_CAST")
+            (packet as Packet<INetHandler>).processPacket(conn)
+        } catch (_: Exception) {}
     }
 
-    public static void sendPacket(Packet<?> packet) {
-        if (mc().getConnection() != null) {
-            mc().getConnection().sendPacket(packet);
-        }
+    @JvmStatic
+    fun sendPacket(packet: Packet<*>) {
+        Minecraft.getMinecraft().connection?.sendPacket(packet)
     }
 
-    public static void sendC0B(boolean sprinting) {
-        if (mc().player == null) return;
-
-        CPacketEntityAction.Action action = sprinting
-                ? CPacketEntityAction.Action.START_SPRINTING
-                : CPacketEntityAction.Action.STOP_SPRINTING;
-
-        sendPacket(new CPacketEntityAction(mc().player, action));
+    @JvmStatic
+    fun sendC0B(sprinting: Boolean) {
+        val player = Minecraft.getMinecraft().player ?: return
+        val action = if (sprinting) CPacketEntityAction.Action.START_SPRINTING
+                     else CPacketEntityAction.Action.STOP_SPRINTING
+        sendPacket(CPacketEntityAction(player, action))
     }
 
-    public static void sendFakeSprint() {
-        sendC0B(false); // STOP_SPRINTING
-        sendC0B(true);  // START_SPRINTING
+    @JvmStatic
+    fun sendFakeSprint() {
+        sendC0B(false)
+        sendC0B(true)
     }
 
-    public static void sendPosition(double x, double y, double z, float yaw, float pitch, boolean onGround) {
-        sendPacket(new CPacketPlayer.PositionRotation(x, y, z, yaw, pitch, onGround));
+    @JvmStatic
+    fun sendPosition(x: Double, y: Double, z: Double, yaw: Float, pitch: Float, onGround: Boolean) {
+        sendPacket(CPacketPlayer.PositionRotation(x, y, z, yaw, pitch, onGround))
     }
 
-    public static void sendRotation(float yaw, float pitch, boolean onGround) {
-        sendPacket(new CPacketPlayer.Rotation(yaw, pitch, onGround));
+    @JvmStatic
+    fun sendRotation(yaw: Float, pitch: Float, onGround: Boolean) {
+        sendPacket(CPacketPlayer.Rotation(yaw, pitch, onGround))
     }
 
-    public static void sendPosition(double x, double y, double z, boolean onGround) {
-        sendPacket(new CPacketPlayer.Position(x, y, z, onGround));
+    @JvmStatic
+    fun sendPosition(x: Double, y: Double, z: Double, onGround: Boolean) {
+        sendPacket(CPacketPlayer.Position(x, y, z, onGround))
     }
 
-    public static void sendPacketNoEvent(Packet<?> packet) {
-        if (mc().getConnection() != null) {
-            mc().getConnection().sendPacket(packet);
-        }
+    @JvmStatic
+    fun sendPacketNoEvent(packet: Packet<*>) {
+        Minecraft.getMinecraft().connection?.sendPacket(packet)
     }
 }
