@@ -1,67 +1,80 @@
-package com.yourname.backtrack.client;
+package com.yourname.backtrack.client
 
-@SuppressWarnings("all")
-public final class ToleranceCalculator {
-    private ToleranceCalculator() {}
+import kotlin.math.abs
+import kotlin.math.sqrt
 
-    public static void compute(MovementSimState s) {
-        double xz = 0.0007;
-        double y = 0.00001;
+object ToleranceCalculator {
 
-        if (s.pastPlayerReduceAttackPhysics <= 1) {
-            xz = s.receivedFlyingPacketIn(4) ? 0.03 : 0.015;
-        }
+    fun compute(s: MovementSimState) {
+        with(s) {
+            // Base tolerance — nearly exact match expected
+            var xz = 0.0007
+            var y  = 0.00001
 
-        if (s.pastExternalVelocity == 0) {
-            xz = 0.005;
-            y = 0.005;
-        } else if (s.pastExternalVelocity < 10) {
-            xz = 0.03;
-            y = 0.01;
-        }
+            // Attack reduce window — server allows wider deviation
+            if (pastPlayerReduceAttackPhysics <= 1) {
+                xz = if (receivedFlyingPacketIn(4)) 0.03 else 0.015
+            }
 
-        if (s.receivedFlyingPacketIn(1) && s.pastExternalVelocity <= 4) {
-            if (y < 0.03) y = 0.03;
-        }
+            // Velocity window — fresh external input, higher uncertainty
+            when {
+                pastExternalVelocity == 0 -> { xz = 0.005; y = 0.005 }
+                pastExternalVelocity < 10 -> { xz = 0.03;  y = 0.01  }
+            }
 
-        if (s.collidedHorizontally) {
-            if (xz < 0.027) xz = 0.027;
-        }
+            // Flying packet arriving right after velocity
+            if (receivedFlyingPacketIn(1) && pastExternalVelocity <= 4) {
+                y = y.coerceAtLeast(0.03)
+            }
 
-        if (s.physicsUnpredictableVelocityExpected) {
-            if (xz < 0.1) xz = 0.1;
-            if (y < 0.05) y = 0.05;
-        }
+            // Horizontal collision — position uncertainty increases
+            if (collidedHorizontally) {
+                xz = xz.coerceAtLeast(0.027)
+            }
 
-        if (s.receivedFlyingPacketIn(2) && s.onGround
-                && Math.abs(s.lastMotionX) < 0.05 && Math.abs(s.lastMotionZ) < 0.05) {
-            if (xz < 0.03) xz = 0.03;
-        }
+            // Unpredictable velocity — widest window
+            if (physicsUnpredictableVelocityExpected) {
+                xz = xz.coerceAtLeast(0.1)
+                y  = y.coerceAtLeast(0.05)
+            }
 
-        double horizPred = Math.sqrt(s.predictedMotionX * s.predictedMotionX + s.predictedMotionZ * s.predictedMotionZ);
-        int allowedRelink = horizPred < 0.03 ? 3 : 1;
-        if (s.physicsPacketRelinkFlyVL > allowedRelink) {
-            if (xz < 0.02) xz = 0.02;
-            if (y < 0.005) y = 0.005;
-        }
+            // Flying packet on ground with minimal horizontal movement
+            if (receivedFlyingPacketIn(2) && onGround
+                && abs(lastMotionX) < 0.05 && abs(lastMotionZ) < 0.05) {
+                xz = xz.coerceAtLeast(0.03)
+            }
 
-        if (s.inWater || s.inLava) {
-            if (y < 0.02) y = 0.02;
-        }
-        if (s.pastWaterMovement <= 10) {
-            if (y < 0.05) y = 0.05;
-        }
-        if (s.inWeb) {
-            if (y < 0.13) y = 0.13;
-        }
-        if (s.pastInWeb < 10 && !s.inWeb) {
-            if (y < 0.1) y = 0.1;
-        }
-        if (s.onClimbable) {
-            if (xz < 0.15) xz = 0.15;
-        }
+            // Relink flying packet exceeded allowed count
+            val horizPred = sqrt(predictedMotionX * predictedMotionX + predictedMotionZ * predictedMotionZ)
+            val allowedRelink = if (horizPred < 0.03) 3 else 1
+            if (physicsPacketRelinkFlyVL > allowedRelink) {
+                xz = xz.coerceAtLeast(0.02)
+                y  = y.coerceAtLeast(0.005)
+            }
 
-        s.toleranceXZ = xz;
-        s.toleranceY = y;
+            // Water / lava
+            if (inWater || inLava) {
+                y = y.coerceAtLeast(0.02)
+            }
+            if (pastWaterMovement <= 10) {
+                y = y.coerceAtLeast(0.05)
+            }
+
+            // Cobweb
+            if (inWeb) {
+                y = y.coerceAtLeast(0.13)
+            }
+            if (pastInWeb < 10 && !inWeb) {
+                y = y.coerceAtLeast(0.1)
+            }
+
+            // Ladders / vines
+            if (onClimbable) {
+                xz = xz.coerceAtLeast(0.15)
+            }
+
+            toleranceXZ = xz
+            toleranceY  = y
+        }
     }
 }
