@@ -1,259 +1,160 @@
-package com.yourname.backtrack.module;
+package com.yourname.backtrack.module
 
-import com.yourname.backtrack.setting.ActionSetting;
-import com.yourname.backtrack.setting.BooleanSetting;
-import com.yourname.backtrack.setting.ModeSetting;
-import com.yourname.backtrack.setting.Setting;
-import setting.SettingGroup;
-import com.yourname.backtrack.gui.HudEditorScreen;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.settings.KeyBinding;
-import net.minecraft.util.text.TextComponentString;
-import org.lwjgl.input.Keyboard;
+import com.yourname.backtrack.gui.HudEditorScreen
+import com.yourname.backtrack.setting.ActionSetting
+import com.yourname.backtrack.setting.BooleanSetting
+import com.yourname.backtrack.setting.ModeSetting
+import com.yourname.backtrack.setting.Setting
+import net.minecraft.client.Minecraft
+import net.minecraft.client.settings.KeyBinding
+import net.minecraft.util.text.TextComponentString
+import org.lwjgl.input.Keyboard
+import setting.SettingGroup
+import java.lang.reflect.Field
+import java.lang.reflect.Modifier
 
-import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.function.Consumer;
+abstract class Module(
+    val name: String,
+    val category: Category,
+    defaultKey: Int
+) {
+    // ── Minecraft access ───────────────────────────────────────────
+    protected val mc: Minecraft get() = Minecraft.getMinecraft()
 
-public abstract class Module {
-
-    protected static Minecraft mc() {
-        return Minecraft.getMinecraft();
-    }
-
-    private static final List<String> HUD_COLOR_NAMES = Arrays.asList(
-            "White", "Red", "Green", "Blue", "Yellow", "Cyan", "Orange", "Pink", "Rainbow"
-    );
-
-    /**
-     * Finds the keyCode field on KeyBinding by scanning all non-static int fields
-     * and picking the one whose value on a probe instance matches the key passed
-     * to the constructor. Works regardless of obfuscation level.
-     */
-    private static Field resolveKeyCodeField(KeyBinding probe, int expectedKey) {
-        for (Field f : KeyBinding.class.getDeclaredFields()) {
-            if (f.getType() != int.class) continue;
-            if (Modifier.isStatic(f.getModifiers())) continue;
-            f.setAccessible(true);
-            try {
-                if (f.getInt(probe) == expectedKey) {
-                    return f;
-                }
-            } catch (IllegalAccessException ignored) {
-            }
+    // ── Key binding (with obfuscation-safe field resolution) ───────
+    val keyBinding: KeyBinding = KeyBinding(name, defaultKey, "Solo Backtrack")
+    var keyCode: Int = defaultKey
+        set(value) {
+            field = value
+            keyCodeField.setInt(keyBinding, value)
         }
-        throw new RuntimeException("[Backtrack] Could not find KeyBinding keyCode field");
+
+    val keyName: String
+        get() = if (keyCode == Keyboard.KEY_NONE) "NONE"
+                else Keyboard.getKeyName(keyCode)
+
+    // ── Settings ───────────────────────────────────────────────────
+    private val _settings = mutableListOf<Setting>()
+    val settings: List<Setting> get() = _settings
+
+    // ── HUD ────────────────────────────────────────────────────────
+    val hudSettings = ModuleHudSettings(name)
+
+    // ── State ──────────────────────────────────────────────────────
+    var enabled: Boolean = false
+        private set
+
+    // ── Lifecycle ──────────────────────────────────────────────────
+    fun setEnabled(value: Boolean) {
+        if (enabled == value) return
+        enabled = value
+        if (value) onEnable() else onDisable()
     }
 
-    private final String name;
-    private final Category category;
-    private final KeyBinding keyBinding;
-    private final ModuleHudSettings hudSettings;
-    private final List<Setting> settings = new ArrayList<>();
-    private boolean enabled;
-    private int keyCode;
+    fun toggle() = setEnabled(!enabled)
 
-    // Field resolved once per module instance during construction.
-    private final Field keyCodeField;
-
-    public Module(String name, Category category, int defaultKey) {
-        this.name = name;
-        this.category = category;
-        this.keyCode = defaultKey;
-        this.keyBinding = new KeyBinding(name, defaultKey, "Solo Backtrack");
-        this.keyCodeField = resolveKeyCodeField(this.keyBinding, defaultKey);
-        this.hudSettings = new ModuleHudSettings(name);
-        this.enabled = false;
+    protected open fun onEnable() {
+        mc.player?.sendMessage(TextComponentString("$name: ON"))
     }
 
-    // ─── Getters ───────────────────────────────────────────────────────────────
-
-    public String getName() {
-        return name;
+    protected open fun onDisable() {
+        mc.player?.sendMessage(TextComponentString("$name: OFF"))
     }
 
-    public String getHudText() {
-        return getName() + " [ON]";
+    /** Override in subclasses for per-tick logic. */
+    open fun onClientTick() {}
+
+    // ── Chat helper ────────────────────────────────────────────────
+    protected fun sendClientMessage(message: String) {
+        mc.player?.sendMessage(TextComponentString(message))
     }
 
-    public Category getCategory() {
-        return category;
+    // ── Settings registration ──────────────────────────────────────
+    protected fun addSetting(setting: Setting) {
+        _settings += setting
     }
 
-    public KeyBinding getKeyBinding() {
-        return keyBinding;
+    protected fun addSettings(vararg settings: Setting) {
+        _settings += settings
     }
 
-    public int getKeyCode() {
-        return keyCode;
-    }
+    open fun getVisibleSettings(): List<Setting> = settings
 
-    public void setKeyCode(int keyCode) {
-        this.keyCode = keyCode;
-        try {
-            keyCodeField.setInt(keyBinding, keyCode);
-        } catch (IllegalAccessException e) {
-            throw new RuntimeException("[Backtrack] Failed to set KeyBinding keyCode", e);
+    // ── HUD helpers ────────────────────────────────────────────────
+    private fun createHudBoolSetting(name: String, initial: Boolean,
+                                      sync: (Boolean) -> Unit): BooleanSetting {
+        return object : BooleanSetting(name, initial, SettingGroup.HUDTEXT) {
+            override fun toggle() { super.toggle(); sync(value) }
+            override fun setValue(v: Boolean) { super.setValue(v); sync(v) }
         }
     }
 
-    public String getKeyName() {
-        if (keyCode == Keyboard.KEY_NONE) {
-            return "NONE";
-        }
-        return Keyboard.getKeyName(keyCode);
-    }
+    protected fun createHudVisibleSetting() =
+        createHudBoolSetting("HUD Visible", hudSettings.isVisible, hudSettings::setVisible)
 
-    public ModuleHudSettings getHudSettings() {
-        return hudSettings;
-    }
+    protected fun createHudShadowSetting() =
+        createHudBoolSetting("HUD Shadow", hudSettings.isShadow, hudSettings::setShadow)
 
-    public boolean isEnabled() {
-        return enabled;
-    }
+    protected fun createHudBackgroundSetting() =
+        createHudBoolSetting("HUD Background", hudSettings.isBackground, hudSettings::setBackground)
 
-    // ─── Toggle / enable ──────────────────────────────────────────────────────
-
-    public void setEnabled(boolean enabled) {
-        if (this.enabled == enabled) return;
-        this.enabled = enabled;
-        if (enabled) {
-            onEnable();
-        } else {
-            onDisable();
+    protected fun createHudColorSetting(): ModeSetting {
+        return object : ModeSetting("HUD Color", HUD_COLOR_NAMES,
+            hudSettings.colorName, SettingGroup.HUDTEXT) {
+            override fun cycle() { super.cycle(); syncHudColor(value) }
+            override fun setValue(v: String) { super.setValue(v); syncHudColor(v) }
         }
     }
 
-    public void toggle() {
-        setEnabled(!enabled);
+    protected fun createResetHudPositionSetting() =
+        ActionSetting("Reset HUD Position", {}, SettingGroup.HUDTEXT)
+
+    protected fun createOpenHudEditorSetting() =
+        ActionSetting("Open HUD Editor", { context ->
+            mc.displayGuiScreen(HudEditorScreen(
+                context.clickGuiScreen,
+                context.moduleManager,
+                context.configManager,
+                context.guiTheme
+            ))
+        }, SettingGroup.HUDTEXT)
+
+    private fun syncHudColor(value: String) {
+        val index = HUD_COLOR_NAMES.indexOf(value)
+        if (index >= 0) hudSettings.colorIndex = index
     }
 
-    protected void onEnable() {
-        sendClientMessage(name + ": ON");
-    }
-
-    protected void onDisable() {
-        sendClientMessage(name + ": OFF");
-    }
-
-    /** Called every tick from ModuleManager.onTick() — override in subclasses for per-tick logic. */
-    public void onClientTick() {
-    }
-
-    protected void sendClientMessage(String message) {
-        if (mc().player != null) {
-            mc().player.sendMessage(new TextComponentString(message));
-        }
-    }
-
-    // ─── Settings ─────────────────────────────────────────────────────────────
-
-    protected void addSetting(Setting setting) {
-        settings.add(setting);
-    }
-
-    protected void addSettings(Setting... settings) {
-        this.settings.addAll(Arrays.asList(settings));
-    }
-
-    public List<Setting> getSettings() {
-        return Collections.unmodifiableList(settings);
-    }
-
-    // ─── HUD settings helpers ─────────────────────────────────────────────────
-
-    private BooleanSetting createHudBoolSetting(String name, boolean initial,
-                                                Consumer<Boolean> sync) {
-        return new BooleanSetting(name, initial, SettingGroup.HUDTEXT) {
-            @Override
-            public void toggle() {
-                super.toggle();
-                sync.accept(getValue());
-            }
-
-            @Override
-            public void setValue(boolean v) {
-                super.setValue(v);
-                sync.accept(v);
-            }
-        };
-    }
-
-    protected BooleanSetting createHudVisibleSetting() {
-        return createHudBoolSetting("HUD Visible", hudSettings.isVisible(), hudSettings::setVisible);
-    }
-
-    protected BooleanSetting createHudShadowSetting() {
-        return createHudBoolSetting("HUD Shadow", hudSettings.isShadow(), hudSettings::setShadow);
-    }
-
-    protected BooleanSetting createHudBackgroundSetting() {
-        return createHudBoolSetting("HUD Background", hudSettings.isBackground(), hudSettings::setBackground);
-    }
-
-    protected ModeSetting createHudColorSetting() {
-        return new ModeSetting(
-                "HUD Color",
-                HUD_COLOR_NAMES,
-                hudSettings.getColorName(),
-                SettingGroup.HUDTEXT
-        ) {
-            @Override
-            public void cycle() {
-                super.cycle();
-                syncHudColorFromMode(getValue());
-            }
-
-            @Override
-            public void setValue(String value) {
-                super.setValue(value);
-                syncHudColorFromMode(getValue());
-            }
-        };
-    }
-
-    protected ActionSetting createResetHudPositionSetting() {
-        return new ActionSetting("Reset HUD Position", () -> {
-        }, SettingGroup.HUDTEXT);
-    }
-
-    protected ActionSetting createOpenHudEditorSetting() {
-        return new ActionSetting("Open HUD Editor", context ->
-                mc().displayGuiScreen(new HudEditorScreen(
-                        context.getClickGuiScreen(),
-                        context.getModuleManager(),
-                        context.getConfigManager(),
-                        context.getGuiTheme()
-                )), SettingGroup.HUDTEXT);
-    }
-
-    private void syncHudColorFromMode(String value) {
-        int index = HUD_COLOR_NAMES.indexOf(value);
-        if (index >= 0) {
-            hudSettings.setColorIndex(index);
-        }
-    }
-
-    protected void addHudSettings() {
+    protected fun addHudSettings() {
         addSettings(
-                createHudVisibleSetting(),
-                createHudShadowSetting(),
-                createHudBackgroundSetting(),
-                createHudColorSetting(),
-                createOpenHudEditorSetting(),
-                createResetHudPositionSetting()
-        );
+            createHudVisibleSetting(),
+            createHudShadowSetting(),
+            createHudBackgroundSetting(),
+            createHudColorSetting(),
+            createOpenHudEditorSetting(),
+            createResetHudPositionSetting()
+        )
     }
 
-    /**
-     * Returns the list of settings that should currently be displayed in the GUI.
-     * Override in subclasses to filter settings based on mode, etc.
-     */
-    public List<Setting> getVisibleSettings() {
-        return getSettings();
+    open fun getHudText(): String = "$name [ON]"
+
+    // ── Reflection cache ───────────────────────────────────────────
+    companion object {
+        private val HUD_COLOR_NAMES = listOf(
+            "White", "Red", "Green", "Blue", "Yellow", "Cyan", "Orange", "Pink", "Rainbow"
+        )
+
+        /** Cached reference to KeyBinding.keyCode — resolved once, works under any obfuscation. */
+        private val keyCodeField: Field by lazy {
+            val probe = KeyBinding("probe", 0, "probe")
+            for (f in KeyBinding::class.java.declaredFields) {
+                if (f.type != Int::class.javaPrimitiveType) continue
+                if (Modifier.isStatic(f.modifiers)) continue
+                f.isAccessible = true
+                try {
+                    if (f.getInt(probe) == 0) return@lazy f
+                } catch (_: IllegalAccessException) {}
+            }
+            throw RuntimeException("[Backtrack] Could not find KeyBinding keyCode field")
+        }
     }
 }
