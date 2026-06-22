@@ -1,239 +1,208 @@
-package com.yourname.backtrack.config;
+package com.yourname.backtrack.config
 
-import com.yourname.backtrack.gui.GuiTheme;
-import com.yourname.backtrack.hud.HudSettings;
-import com.yourname.backtrack.module.Module;
-import com.yourname.backtrack.module.ModuleHudSettings;
-import com.yourname.backtrack.setting.BooleanSetting;
-import com.yourname.backtrack.setting.ModeSetting;
-import com.yourname.backtrack.setting.NumberSetting;
-import com.yourname.backtrack.setting.Setting;
-import com.yourname.backtrack.module.ModuleManager;
-import net.minecraft.launchwrapper.Launch;
+import com.google.gson.GsonBuilder
+import com.google.gson.JsonParser
+import com.yourname.backtrack.gui.GuiTheme
+import com.yourname.backtrack.hud.HudSettings
+import com.yourname.backtrack.module.Module
+import com.yourname.backtrack.module.ModuleHudSettings
+import com.yourname.backtrack.module.ModuleManager
+import com.yourname.backtrack.setting.BooleanSetting
+import com.yourname.backtrack.setting.ModeSetting
+import com.yourname.backtrack.setting.NumberSetting
+import com.yourname.backtrack.setting.Setting
+import net.minecraft.launchwrapper.Launch
+import java.io.File
 
-import java.io.*;
-import java.util.Properties;
+class ConfigManager {
 
-public class ConfigManager {
+    private val file: File = File(Launch.minecraftHome, "backtrack/solobacktrack.json").also {
+        it.parentFile?.mkdirs()
+    }
 
-    private final File file;
-    private Properties cachedProperties = null;
+    // ── GUI ─────────────────────────────────────────────────────
+    fun loadGuiX() = loadJson()?.get("gui")?.asJsonObject?.get("x")?.asInt ?: 20
+    fun loadGuiY() = loadJson()?.get("gui")?.asJsonObject?.get("y")?.asInt ?: 20
+    fun saveGuiPosition(x: Int, y: Int) = updateJson { json ->
+        json.addProperty("gui.x", x)
+        json.addProperty("gui.y", y)
+    }
 
-    public ConfigManager() {
-        File configDir = new File(Launch.minecraftHome, "backtrack");
-        if (!configDir.exists()) {
-            configDir.mkdirs();
+    // ── Simulator settings ──────────────────────────────────────
+    fun loadSimulatorShadow() = loadJson()?.get("simulator")?.asJsonObject?.get("shadow")?.asBoolean ?: false
+    fun loadSimulatorDebug() = loadJson()?.get("simulator")?.asJsonObject?.get("debug")?.asBoolean ?: false
+    fun loadSimulatorDebugChat() = loadJson()?.get("simulator")?.asJsonObject?.get("debugChat")?.asBoolean ?: false
+
+    // ── HUD ─────────────────────────────────────────────────────
+    fun saveHudSettings(hud: HudSettings) = updateJson { json ->
+        val hudObj = json.getAsJsonObject("hud") ?: JsonObject()
+        hudObj.addProperty("x", hud.x)
+        hudObj.addProperty("y", hud.y)
+        hudObj.addProperty("lineHeight", hud.lineHeight)
+        hudObj.addProperty("visible", hud.visible)
+        hudObj.addProperty("shadow", hud.shadow)
+        hudObj.addProperty("background", hud.background)
+        hudObj.addProperty("colorIndex", hud.colorIndex)
+        hudObj.addProperty("anchorIndex", hud.anchor.ordinal)
+        hudObj.addProperty("textMode", hud.textMode.ordinal)
+        json.add("hud", hudObj)
+    }
+
+    fun loadHudSettings(hud: HudSettings) {
+        val hudObj = loadJson()?.getAsJsonObject("hud") ?: return
+        hud.x = hudObj.get("x")?.asInt ?: 5
+        hud.y = hudObj.get("y")?.asInt ?: 5
+        hud.lineHeight = hudObj.get("lineHeight")?.asInt ?: 12
+        hud.visible = hudObj.get("visible")?.asBoolean ?: true
+        hud.shadow = hudObj.get("shadow")?.asBoolean ?: true
+        hud.background = hudObj.get("background")?.asBoolean ?: true
+        hud.colorIndex = hudObj.get("colorIndex")?.asInt ?: 0
+        hud.anchor = HudAnchor.values().getOrElse(hudObj.get("anchorIndex")?.asInt ?: 0) { HudAnchor.TOP_LEFT }
+        hud.textMode = HudTextMode.values().getOrElse(hudObj.get("textMode")?.asInt ?: 1) { HudTextMode.NAME_STATUS }
+    }
+
+    // ── Module states ───────────────────────────────────────────
+    fun saveModuleStates(mm: ModuleManager) = updateJson { json ->
+        val modulesObj = json.getAsJsonObject("modules") ?: JsonObject()
+        mm.modules.forEach { module ->
+            val modObj = modulesObj.getAsJsonObject(module.name) ?: JsonObject()
+            modObj.addProperty("enabled", module.enabled)
+            modObj.addProperty("key", module.keyCode)
+            modulesObj.add(module.name, modObj)
         }
-        file = new File(configDir, "solobacktrack.properties");
+        json.add("modules", modulesObj)
     }
 
-    // --- GUI position ---
-    public int loadGuiX() {
-        return parseInt(loadProperties().getProperty("gui.x"), 20);
-    }
-    public int loadGuiY() {
-        return parseInt(loadProperties().getProperty("gui.y"), 20);
-    }
-    public void saveGuiPosition(int x, int y) {
-        Properties p = loadProperties();
-        p.setProperty("gui.x", String.valueOf(x));
-        p.setProperty("gui.y", String.valueOf(y));
-        saveProperties(p);
-    }
-
-    // --- Simulator settings ---
-    public boolean loadSimulatorShadow() {
-        return parseBoolean(loadProperties().getProperty("simulator.shadow"), false);
-    }
-    public boolean loadSimulatorDebug() {
-        return parseBoolean(loadProperties().getProperty("simulator.debug"), false);
-    }
-    public boolean loadSimulatorDebugChat() {
-        return parseBoolean(loadProperties().getProperty("simulator.debugChat"), false);
-    }
-
-    // --- HUD settings ---
-    public void saveHudSettings(HudSettings hudSettings) {
-        Properties p = loadProperties();
-        p.setProperty("hud.x", String.valueOf(hudSettings.getX()));
-        p.setProperty("hud.y", String.valueOf(hudSettings.getY()));
-        p.setProperty("hud.lineHeight", String.valueOf(hudSettings.getLineHeight()));
-        p.setProperty("hud.visible", String.valueOf(hudSettings.isVisible()));
-        p.setProperty("hud.shadow", String.valueOf(hudSettings.isShadow()));
-        p.setProperty("hud.background", String.valueOf(hudSettings.isBackground()));
-        p.setProperty("hud.colorIndex", String.valueOf(hudSettings.getColorIndex()));
-        p.setProperty("hud.anchorIndex", String.valueOf(hudSettings.getAnchorIndex()));
-        p.setProperty("hud.textMode", String.valueOf(hudSettings.getTextMode()));
-        saveProperties(p);
-    }
-    public void loadHudSettings(HudSettings hudSettings) {
-        Properties p = loadProperties();
-        hudSettings.setX(parseInt(p.getProperty("hud.x"), 5));
-        hudSettings.setY(parseInt(p.getProperty("hud.y"), 5));
-        hudSettings.setLineHeight(parseInt(p.getProperty("hud.lineHeight"), 12));
-        hudSettings.setVisible(parseBoolean(p.getProperty("hud.visible"), true));
-        hudSettings.setShadow(parseBoolean(p.getProperty("hud.shadow"), true));
-        hudSettings.setBackground(parseBoolean(p.getProperty("hud.background"), true));
-        hudSettings.setColorIndex(parseInt(p.getProperty("hud.colorIndex"), 0));
-        hudSettings.setAnchorIndex(parseInt(p.getProperty("hud.anchorIndex"), 0));
-        hudSettings.setTextMode(parseInt(p.getProperty("hud.textMode"), 1));
-    }
-
-    // --- Module states ---
-    public void saveModuleStates(ModuleManager mm) {
-        Properties p = loadProperties();
-        for (Module module : mm.getModules()) {
-            String name = module.getName();
-            p.setProperty("module." + name + ".enabled", String.valueOf(module.isEnabled()));
-            p.setProperty("module." + name + ".key", String.valueOf(module.getKeyCode()));
-        }
-        saveProperties(p);
-    }
-    public void loadModuleStates(ModuleManager mm) {
-        Properties p = loadProperties();
-        for (Module module : mm.getModules()) {
-            String name = module.getName();
-            module.setEnabled(parseBoolean(p.getProperty("module." + name + ".enabled"), false));
+    fun loadModuleStates(mm: ModuleManager) {
+        val modulesObj = loadJson()?.getAsJsonObject("modules") ?: return
+        mm.modules.forEach { module ->
+            val modObj = modulesObj.getAsJsonObject(module.name) ?: return@forEach
+            module.enabled = modObj.get("enabled")?.asBoolean ?: false
         }
     }
 
-    // --- Module keybinds ---
-    public void loadModuleKeybinds(ModuleManager mm) {
-        Properties p = loadProperties();
-        for (Module module : mm.getModules()) {
-            String name = module.getName();
-            module.setKeyCode(parseInt(p.getProperty("module." + name + ".key"), module.getKeyCode()));
+    fun loadModuleKeybinds(mm: ModuleManager) {
+        val modulesObj = loadJson()?.getAsJsonObject("modules") ?: return
+        mm.modules.forEach { module ->
+            val modObj = modulesObj.getAsJsonObject(module.name) ?: return@forEach
+            module.keyCode = modObj.get("key")?.asInt ?: module.keyCode
         }
     }
 
-    // --- Module settings ---
-    public void saveModuleSettings(ModuleManager mm) {
-        Properties p = loadProperties();
-        for (Module module : mm.getModules()) {
-            String name = module.getName();
-            for (Setting setting : module.getSettings()) {
-                String key = "module." + name + ".setting." + setting.getName();
-                if (setting instanceof BooleanSetting) {
-                    p.setProperty(key, String.valueOf(((BooleanSetting) setting).getValue()));
-                } else if (setting instanceof NumberSetting) {
-                    p.setProperty(key, String.valueOf(((NumberSetting) setting).getValue()));
-                } else if (setting instanceof ModeSetting) {
-                    p.setProperty(key, ((ModeSetting) setting).getValue());
+    // ── Module settings ─────────────────────────────────────────
+    fun saveModuleSettings(mm: ModuleManager) = updateJson { json ->
+        val settingsObj = json.getAsJsonObject("moduleSettings") ?: JsonObject()
+        mm.modules.forEach { module ->
+            val modObj = settingsObj.getAsJsonObject(module.name) ?: JsonObject()
+            module.settings.forEach { setting ->
+                when (setting) {
+                    is BooleanSetting -> modObj.addProperty(setting.name, setting.value)
+                    is NumberSetting  -> modObj.addProperty(setting.name, setting.value)
+                    is ModeSetting    -> modObj.addProperty(setting.name, setting.value)
                 }
             }
+            settingsObj.add(module.name, modObj)
         }
-        saveProperties(p);
+        json.add("moduleSettings", settingsObj)
     }
-    public void loadModuleSettings(ModuleManager mm) {
-        Properties p = loadProperties();
-        for (Module module : mm.getModules()) {
-            String name = module.getName();
-            for (Setting setting : module.getSettings()) {
-                String key = "module." + name + ".setting." + setting.getName();
-                if (setting instanceof BooleanSetting) {
-                    ((BooleanSetting) setting).setValue(
-                            parseBoolean(p.getProperty(key), ((BooleanSetting) setting).getValue()));
-                } else if (setting instanceof NumberSetting) {
-                    ((NumberSetting) setting).setValue(
-                            parseDouble(p.getProperty(key), ((NumberSetting) setting).getValue()));
-                } else if (setting instanceof ModeSetting) {
-                    String val = p.getProperty(key);
-                    ModeSetting ms = (ModeSetting) setting;
-                    if (val != null && ms.getModes().contains(val)) ms.setValue(val);
+
+    fun loadModuleSettings(mm: ModuleManager) {
+        val settingsObj = loadJson()?.getAsJsonObject("moduleSettings") ?: return
+        mm.modules.forEach { module ->
+            val modObj = settingsObj.getAsJsonObject(module.name) ?: return@forEach
+            module.settings.forEach { setting ->
+                val key = setting.name
+                when (setting) {
+                    is BooleanSetting -> modObj.get(key)?.asBoolean?.let { setting.value = it }
+                    is NumberSetting  -> modObj.get(key)?.asDouble?.let { setting.value = it }
+                    is ModeSetting    -> {
+                        val value = modObj.get(key)?.asString
+                        if (value != null && value in setting.modes) setting.value = value
+                    }
                 }
             }
         }
     }
 
-    // --- Module HUD settings ---
-    public void saveModuleHudSettings(ModuleManager mm) {
-        Properties p = loadProperties();
-        for (Module module : mm.getModules()) {
-            String name = module.getName();
-            ModuleHudSettings moduleHud = module.getHudSettings();
-            String base = "module." + name + ".hud.";
-            p.setProperty(base + "x", String.valueOf(moduleHud.getX()));
-            p.setProperty(base + "y", String.valueOf(moduleHud.getY()));
-            p.setProperty(base + "visible", String.valueOf(moduleHud.isVisible()));
-            p.setProperty(base + "shadow", String.valueOf(moduleHud.isShadow()));
-            p.setProperty(base + "background", String.valueOf(moduleHud.isBackground()));
-            p.setProperty(base + "color", String.valueOf(moduleHud.getColorIndex()));
+    // ── Module HUD settings ─────────────────────────────────────
+    fun saveModuleHudSettings(mm: ModuleManager) = updateJson { json ->
+        val hudSettingsObj = json.getAsJsonObject("moduleHud") ?: JsonObject()
+        mm.modules.forEach { module ->
+            val hud = module.hudSettings
+            val hudObj = hudSettingsObj.getAsJsonObject(module.name) ?: JsonObject()
+            hudObj.addProperty("x", hud.x)
+            hudObj.addProperty("y", hud.y)
+            hudObj.addProperty("visible", hud.visible)
+            hudObj.addProperty("shadow", hud.shadow)
+            hudObj.addProperty("background", hud.background)
+            hudObj.addProperty("color", hud.colorIndex)
+            hudSettingsObj.add(module.name, hudObj)
         }
-        saveProperties(p);
+        json.add("moduleHud", hudSettingsObj)
     }
-    public void loadModuleHudSettings(ModuleManager mm) {
-        Properties p = loadProperties();
-        for (Module module : mm.getModules()) {
-            String name = module.getName();
-            ModuleHudSettings moduleHud = module.getHudSettings();
-            String base = "module." + name + ".hud.";
-            moduleHud.setX(parseInt(p.getProperty(base + "x"), moduleHud.getX()));
-            moduleHud.setY(parseInt(p.getProperty(base + "y"), moduleHud.getY()));
-            moduleHud.setVisible(parseBoolean(p.getProperty(base + "visible"), moduleHud.isVisible()));
-            moduleHud.setShadow(parseBoolean(p.getProperty(base + "shadow"), moduleHud.isShadow()));
-            moduleHud.setBackground(parseBoolean(p.getProperty(base + "background"), moduleHud.isBackground()));
-            moduleHud.setColorIndex(parseInt(p.getProperty(base + "color"), moduleHud.getColorIndex()));
+
+    fun loadModuleHudSettings(mm: ModuleManager) {
+        val hudSettingsObj = loadJson()?.getAsJsonObject("moduleHud") ?: return
+        mm.modules.forEach { module ->
+            val hud = module.hudSettings
+            val hudObj = hudSettingsObj.getAsJsonObject(module.name) ?: return@forEach
+            hud.x = hudObj.get("x")?.asInt ?: hud.x
+            hud.y = hudObj.get("y")?.asInt ?: hud.y
+            hud.visible = hudObj.get("visible")?.asBoolean ?: hud.visible
+            hud.shadow = hudObj.get("shadow")?.asBoolean ?: hud.shadow
+            hud.background = hudObj.get("background")?.asBoolean ?: hud.background
+            hud.colorIndex = hudObj.get("color")?.asInt ?: hud.colorIndex
         }
     }
 
-    // --- saveAll / loadAll ---
-    public void saveAll(ModuleManager mm, HudSettings hudSettings, GuiTheme theme, int guiX, int guiY) {
-        Properties p = loadProperties();
-        p.setProperty("gui.x", String.valueOf(guiX));
-        p.setProperty("gui.y", String.valueOf(guiY));
-        p.setProperty("gui.theme.accent", String.valueOf(theme.getAccentIndex()));
-        p.setProperty("gui.theme.background", String.valueOf(theme.getBackgroundIndex()));
-        saveProperties(p);
-        saveHudSettings(hudSettings);
-        saveModuleStates(mm);
-        saveModuleSettings(mm);
-        saveModuleHudSettings(mm);
-    }
-    public void loadAll(ModuleManager mm, HudSettings hudSettings, GuiTheme theme) {
-        Properties p = loadProperties();
-        theme.setAccentIndex(parseInt(p.getProperty("gui.theme.accent"), 0));
-        theme.setBackgroundIndex(parseInt(p.getProperty("gui.theme.background"), 0));
-        loadHudSettings(hudSettings);
-        loadModuleStates(mm);
-        loadModuleKeybinds(mm);
-        loadModuleSettings(mm);
-        loadModuleHudSettings(mm);
+    // ── Bulk save/load ──────────────────────────────────────────
+    fun saveAll(mm: ModuleManager, hud: HudSettings, theme: GuiTheme, guiX: Int, guiY: Int) {
+        saveGuiPosition(guiX, guiY)
+        saveHudSettings(hud)
+        saveModuleStates(mm)
+        saveModuleSettings(mm)
+        saveModuleHudSettings(mm)
+        updateJson { json ->
+            val themeObj = json.getAsJsonObject("theme") ?: JsonObject()
+            themeObj.addProperty("accent", theme.accentIndex)
+            themeObj.addProperty("background", theme.backgroundIndex)
+            json.add("theme", themeObj)
+        }
     }
 
-    // --- Internal helpers ---
-    private Properties loadProperties() {
-        if (cachedProperties != null) return cachedProperties;
-        Properties p = new Properties();
-        if (file.exists()) {
-            try (InputStream in = new FileInputStream(file)) {
-                p.load(in);
-            } catch (IOException e) {
-                System.err.println("[ConfigManager] Failed to load config: " + e.getMessage());
-            }
+    fun loadAll(mm: ModuleManager, hud: HudSettings, theme: GuiTheme) {
+        val json = loadJson()
+        theme.accentIndex = json?.getAsJsonObject("theme")?.get("accent")?.asInt ?: 0
+        theme.backgroundIndex = json?.getAsJsonObject("theme")?.get("background")?.asInt ?: 0
+        loadHudSettings(hud)
+        loadModuleStates(mm)
+        loadModuleKeybinds(mm)
+        loadModuleSettings(mm)
+        loadModuleHudSettings(mm)
+    }
+
+    // ── JSON persistence ────────────────────────────────────────
+    private var cachedJson: JsonObject? = null
+
+    private fun loadJson(): JsonObject? {
+        if (cachedJson != null) return cachedJson
+        if (!file.exists()) return null
+        return try {
+            JsonParser.parseReader(file.reader()).asJsonObject.also { cachedJson = it }
+        } catch (e: Exception) {
+            System.err.println("[ConfigManager] Failed to load config: ${e.message}")
+            null
         }
-        cachedProperties = p;
-        return p;
     }
-    private void saveProperties(Properties p) {
-        try (OutputStream out = new FileOutputStream(file)) {
-            p.store(out, "Backtrack config");
-            cachedProperties = null;
-        } catch (IOException e) {
-            System.err.println("[ConfigManager] Failed to save config: " + e.getMessage());
+
+    private fun updateJson(block: (JsonObject) -> Unit) {
+        val json = loadJson() ?: JsonObject()
+        block(json)
+        try {
+            file.writeText(GsonBuilder().setPrettyPrinting().create().toJson(json))
+            cachedJson = json
+        } catch (e: Exception) {
+            System.err.println("[ConfigManager] Failed to save config: ${e.message}")
         }
-    }
-    private int parseInt(String value, int defaultValue) {
-        if (value == null) return defaultValue;
-        try { return Integer.parseInt(value.trim()); }
-        catch (NumberFormatException e) { return defaultValue; }
-    }
-    private boolean parseBoolean(String value, boolean defaultValue) {
-        if (value == null) return defaultValue;
-        return Boolean.parseBoolean(value.trim());
-    }
-    private double parseDouble(String value, double defaultValue) {
-        if (value == null) return defaultValue;
-        try { return Double.parseDouble(value.trim()); }
-        catch (NumberFormatException e) { return defaultValue; }
     }
 }
