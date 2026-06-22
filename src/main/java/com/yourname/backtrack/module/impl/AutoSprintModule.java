@@ -1,119 +1,134 @@
-package com.yourname.backtrack.module.impl;
+package com.yourname.backtrack.module.impl
 
-import com.yourname.backtrack.client.ClientSimulator;
-import com.yourname.backtrack.module.Category;
-import com.yourname.backtrack.module.Module;
-import com.yourname.backtrack.setting.BooleanSetting;
-import com.yourname.backtrack.setting.ModeSetting;
-import com.yourname.backtrack.setting.NumberSetting;
-import net.minecraft.client.settings.KeyBinding;
-import org.lwjgl.input.Keyboard;
+import com.yourname.backtrack.client.ClientSimulator
+import com.yourname.backtrack.module.Category
+import com.yourname.backtrack.module.Module
+import com.yourname.backtrack.setting.BooleanSetting
+import com.yourname.backtrack.setting.ModeSetting
+import com.yourname.backtrack.setting.NumberSetting
+import net.minecraft.client.settings.KeyBinding
+import net.minecraftforge.fml.common.eventhandler.SubscribeEvent
+import net.minecraftforge.fml.common.gameevent.TickEvent
+import org.lwjgl.input.Keyboard
+import kotlin.math.max
 
-import java.util.Arrays;
+class AutoSprintModule : Module("AutoSprint", Category.MOVEMENT, Keyboard.KEY_NONE) {
 
-public class AutoSprintModule extends Module {
+    private val mode          = ModeSetting("Mode", listOf("Simple", "Intave"), "Intave")
+    private val requireForward = BooleanSetting("Require Forward", true)
+    private val allowSneak    = BooleanSetting("Allow Sneak", false)
+    private val postHurtTicks = NumberSetting("PostHurt Ticks", 10, 0, 20, 1)
+    private val hungerCheck   = BooleanSetting("Hunger Check", true)
+    private val debug         = BooleanSetting("Debug", false)
 
-    private final ModeSetting mode = new ModeSetting("Mode",
-            Arrays.asList("Simple", "Intave"), "Intave");
-    private final BooleanSetting requireForward = new BooleanSetting("Require Forward", true);
-    private final BooleanSetting allowSneak     = new BooleanSetting("Allow Sneak", false);
-    private final NumberSetting  postHurtTicks  = new NumberSetting("PostHurt Ticks", 10, 0, 20, 1);
-    private final BooleanSetting hungerCheck    = new BooleanSetting("Hunger Check", true);
-    private final BooleanSetting debug          = new BooleanSetting("Debug", false);
+    // Intave: randomise the delay so it never repeats exactly
+    private val randomiseDelay = BooleanSetting("RandomiseDelay", true)
 
-    private int sprintBlockedTicks = 0;
-    private int sprintRetryCounter = 0;
+    private var sprintBlockedTicks = 0
+    private var sprintRetryCounter = 0
+    private var actualBlockTicks   = 10  // the current (possibly randomised) block duration
 
-    public AutoSprintModule() {
-        super("AutoSprint", Category.MOVEMENT, Keyboard.KEY_NONE);
-        addSettings(mode, requireForward, allowSneak, postHurtTicks, hungerCheck, debug);
-        addHudSettings();
+    init {
+        addSettings(mode, requireForward, allowSneak, postHurtTicks, hungerCheck, debug, randomiseDelay)
+        addHudSettings()
     }
 
-    @Override
-    public void onClientTick() {
-        if (!isEnabled() || mc().player == null || mc().world == null) return;
+    @SubscribeEvent
+    fun onClientTick(event: TickEvent.ClientTickEvent) {
+        if (event.phase != TickEvent.Phase.START) return
+        if (!isEnabled) return
+        val player = mc.player ?: return
+        if (mc.world == null) return
 
-        // Disable sprint if food level is too low
-        if (hungerCheck.getValue() && mc().player.getFoodStats().getFoodLevel() <= 6) {
-            mc().player.setSprinting(false);
-            return;
+        // ── Hunger check ──────────────────────────────────────────
+        if (hungerCheck.value && player.foodStats.foodLevel <= 6) {
+            player.isSprinting = false
+            return
         }
 
-        if (!mode.getValue().equals("Intave")) {
-            simpleSprint();
-            return;
+        // ── Water / lava — sprinting is impossible, forcing it flags physics ──
+        if (player.isInWater || player.isInLava) {
+            player.isSprinting = false
+            return
         }
 
-        // Intave mode: block sprint after taking damage for the configured window
-        int pev = ClientSimulator.INSTANCE.getPastExternalVelocity();
+        if (mode.value != "Intave") {
+            simpleSprint()
+            return
+        }
 
-        if (mc().player.hurtTime > 0 && mc().player.isSprinting()) {
-            sprintBlockedTicks = (int) postHurtTicks.getValue();
-            sprintRetryCounter = 0;
+        // ── Intave mode ───────────────────────────────────────────
 
-            if (debug.getValue()) {
-                sendClientMessage("§cSprint §7blocked for " + sprintBlockedTicks + " ticks (pev=" + pev + ")");
+        // Detect fresh damage — block sprint for the configured window
+        if (player.hurtTime > 0 && player.isSprinting) {
+            val base = postHurtTicks.value.toInt()
+            actualBlockTicks = if (randomiseDelay.value) {
+                max(1, base + (Math.random() * 3 - 1).toInt()) // ±1 tick jitter
+            } else {
+                base
+            }
+            sprintBlockedTicks = actualBlockTicks
+            sprintRetryCounter = 0
+
+            if (debug.value) {
+                sendClientMessage("§cSprint §7blocked for $sprintBlockedTicks ticks (pev=${ClientSimulator.pastExternalVelocity})")
             }
         }
 
         // Hold sprint off during the block window
         if (sprintBlockedTicks > 0) {
-            mc().player.setSprinting(false);
-            sprintBlockedTicks--;
-            sprintRetryCounter = 0;
-            return;
+            player.isSprinting = false
+            sprintBlockedTicks--
+            sprintRetryCounter = 0
+            return
         }
 
         // Already sprinting — nothing to do
-        if (mc().player.isSprinting()) return;
+        if (player.isSprinting) return
 
         // Check conditions for enabling sprint
-        if (requireForward.getValue() && mc().player.moveForward <= 0) return;
-        if (!allowSneak.getValue() && mc().player.isSneaking()) return;
+        if (requireForward.value && player.moveForward <= 0) return
+        if (!allowSneak.value && player.isSneaking) return
 
         // Try to enable sprint
-        mc().player.setSprinting(true);
-        // Hold the virtual sprint key for persistence
-        KeyBinding.setKeyBindState(mc().gameSettings.keyBindSprint.getKeyCode(), true);
+        player.isSprinting = true
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindSprint.keyCode, true)
 
-        if (!mc().player.isSprinting()) {
-            // setSprinting failed (vanilla toggle timer active) — retry next tick
-            sprintRetryCounter++;
-            if (debug.getValue() && sprintRetryCounter <= 1) {
-                sendClientMessage("§eSprint §7toggle block, retrying (count=" + sprintRetryCounter + ")");
+        if (!player.isSprinting) {
+            // setSprinting failed (vanilla toggle timer) — retry next tick
+            sprintRetryCounter++
+            if (debug.value && sprintRetryCounter <= 1) {
+                sendClientMessage("§eSprint §7toggle block, retrying (count=$sprintRetryCounter)")
             }
         } else {
-            sprintRetryCounter = 0;
+            sprintRetryCounter = 0
         }
     }
 
-    private void simpleSprint() {
-        if (mc().player.hurtTime > 0) {
-            mc().player.setSprinting(false);
-            return;
+    private fun simpleSprint() {
+        val player = mc.player ?: return
+
+        if (player.hurtTime > 0) {
+            player.isSprinting = false
+            return
         }
 
-        if (mc().player.isSprinting()) return;
-        if (requireForward.getValue() && mc().player.moveForward <= 0) return;
-        if (!allowSneak.getValue() && mc().player.isSneaking()) return;
+        if (player.isSprinting) return
+        if (requireForward.value && player.moveForward <= 0) return
+        if (!allowSneak.value && player.isSneaking) return
 
-        mc().player.setSprinting(true);
-        KeyBinding.setKeyBindState(mc().gameSettings.keyBindSprint.getKeyCode(), true);
+        player.isSprinting = true
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindSprint.keyCode, true)
     }
 
-    @Override
-    public String getHudText() {
-        if (sprintBlockedTicks > 0) {
-            return "Sprint §7blocked §c" + sprintBlockedTicks;
-        }
-        return "AutoSprint Intave";
+    override fun getHudText(): String {
+        if (sprintBlockedTicks > 0) return "Sprint §7blocked §c$sprintBlockedTicks"
+        return "AutoSprint Intave"
     }
 
-    @Override
-    public void onDisable() {
-        KeyBinding.setKeyBindState(mc().gameSettings.keyBindSprint.getKeyCode(), false);
-        sprintBlockedTicks = 0;
-        sprintRetryCounter = 0;
+    override fun onDisable() {
+        KeyBinding.setKeyBindState(mc.gameSettings.keyBindSprint.keyCode, false)
+        sprintBlockedTicks = 0
+        sprintRetryCounter = 0
     }
 }
