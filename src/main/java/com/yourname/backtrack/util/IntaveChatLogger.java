@@ -31,7 +31,15 @@ public class IntaveChatLogger {
             "is interacting suspiciously",
             "is placing blocks suspiciously",
             "is performing invalid item-operations",
-            "has been removed"
+            "has been removed",
+            "suspicious clicks",
+            "click pattern",
+            "knockback manipulation",
+            "velocity manipulation",
+            "improbable velocity",
+            "physics violation",
+            "VL",
+            "violation"
     };
 
     @SubscribeEvent
@@ -41,9 +49,12 @@ public class IntaveChatLogger {
 
         boolean match = false;
         for (String trigger : TRIGGERS) {
-            if (plain.contains(trigger)) { match = true; break; }
+            if (plain.toLowerCase().contains(trigger.toLowerCase())) { match = true; break; }
         }
         if (!match) return;
+
+        // Route to unified FlagLogger first — catches VL numbers, trust factor, etc.
+        FlagLogger.INSTANCE.logChatFlag(Minecraft.getMinecraft(), plain);
 
         String hover = extractHover(root);
 
