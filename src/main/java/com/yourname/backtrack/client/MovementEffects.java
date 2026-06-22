@@ -1,31 +1,46 @@
-package com.yourname.backtrack.client;
+package com.yourname.backtrack.client
 
-import net.minecraft.client.Minecraft;
-import net.minecraft.init.MobEffects;
-import net.minecraft.potion.PotionEffect;
+import net.minecraft.client.Minecraft
+import net.minecraft.init.MobEffects
 
-public final class MovementEffects {
+/**
+ * Potion-effect aware attribute modifiers.
+ * Applies Speed, Slowness, and Jump Boost adjustments exactly as the
+ * vanilla server would when computing movement attributes.
+ */
+object MovementEffects {
 
-    public static float applySpeedEffect(float aiMoveSpeed, Minecraft mc) {
-        PotionEffect speed = mc.player.getActivePotionEffect(MobEffects.SPEED);
-        if (speed != null) {
-            int amp = speed.getAmplifier() + 1;
-            aiMoveSpeed *= 1.0f + 0.4f * amp;
+    /**
+     * Applies Speed (× 1.0 + 0.4 × amplifier) and Slowness (× 1.0 − 0.15 × amplifier)
+     * multipliers to the base [aiMoveSpeed].
+     */
+    fun applySpeedEffect(aiMoveSpeed: Float, mc: Minecraft): Float {
+        var speed = aiMoveSpeed
+
+        val speedEffect = mc.player?.getActivePotionEffect(MobEffects.SPEED)
+        if (speedEffect != null) {
+            speed *= 1.0f + 0.4f * (speedEffect.amplifier + 1)
         }
-        PotionEffect slowness = mc.player.getActivePotionEffect(MobEffects.SLOWNESS);
-        if (slowness != null) {
-            int amp = slowness.getAmplifier() + 1;
-            aiMoveSpeed *= 1.0f - 0.15f * amp;
+
+        val slownessEffect = mc.player?.getActivePotionEffect(MobEffects.SLOWNESS)
+        if (slownessEffect != null) {
+            speed *= 1.0f - 0.15f * (slownessEffect.amplifier + 1)
         }
-        return aiMoveSpeed;
+
+        return speed
     }
 
-    public static float applyJumpBoost(float jumpMotion, Minecraft mc) {
-        PotionEffect jump = mc.player.getActivePotionEffect(MobEffects.JUMP_BOOST);
-        if (jump != null) {
-            int amp = jump.getAmplifier() + 1;
-            jumpMotion += amp * 0.1f;
+    /**
+     * Adds +0.1f per Jump Boost amplifier level to the base [jumpMotion].
+     */
+    fun applyJumpBoost(jumpMotion: Float, mc: Minecraft): Float {
+        var jump = jumpMotion
+
+        val jumpEffect = mc.player?.getActivePotionEffect(MobEffects.JUMP_BOOST)
+        if (jumpEffect != null) {
+            jump += (jumpEffect.amplifier + 1) * 0.1f
         }
-        return jumpMotion;
+
+        return jump
     }
 }
