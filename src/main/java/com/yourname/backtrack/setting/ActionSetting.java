@@ -1,85 +1,42 @@
-package com.yourname.backtrack.setting;
+package com.yourname.backtrack.setting
 
-import com.yourname.backtrack.config.ConfigManager;
-import com.yourname.backtrack.gui.ClickGuiScreen;
-import com.yourname.backtrack.gui.GuiTheme;
-import com.yourname.backtrack.module.ModuleManager;
-import setting.SettingGroup;
+import com.yourname.backtrack.config.ConfigManager
+import com.yourname.backtrack.gui.ClickGuiScreen
+import com.yourname.backtrack.gui.GuiTheme
+import com.yourname.backtrack.module.ModuleManager
+import setting.SettingGroup
 
-public class ActionSetting extends Setting {
+data class ActionContext(
+    val clickGuiScreen: ClickGuiScreen,
+    val moduleManager: ModuleManager,
+    val configManager: ConfigManager,
+    val guiTheme: GuiTheme
+)
 
-    public interface ContextAction {
-        void run(ActionContext context);
+open class ActionSetting(
+    name: String,
+    private val action: Runnable?,
+    private val contextAction: ContextAction?,
+    group: SettingGroup = SettingGroup.MAIN
+) : Setting(name, group) {
+
+    fun interface ContextAction {
+        fun run(context: ActionContext)
     }
 
-    public static class ActionContext {
-        private final ClickGuiScreen clickGuiScreen;
-        private final ModuleManager moduleManager;
-        private final ConfigManager configManager;
-        private final GuiTheme guiTheme;
+    // Runnable-only constructor
+    constructor(name: String, action: Runnable, group: SettingGroup = SettingGroup.MAIN) :
+        this(name, action, null, group)
 
-        public ActionContext(ClickGuiScreen clickGuiScreen,
-                             ModuleManager moduleManager,
-                             ConfigManager configManager,
-                             GuiTheme guiTheme) {
-            this.clickGuiScreen = clickGuiScreen;
-            this.moduleManager = moduleManager;
-            this.configManager = configManager;
-            this.guiTheme = guiTheme;
-        }
+    // ContextAction-only constructor
+    constructor(name: String, contextAction: ContextAction, group: SettingGroup = SettingGroup.MAIN) :
+        this(name, null, contextAction, group)
 
-        public ClickGuiScreen getClickGuiScreen() {
-            return clickGuiScreen;
-        }
-
-        public ModuleManager getModuleManager() {
-            return moduleManager;
-        }
-
-        public ConfigManager getConfigManager() {
-            return configManager;
-        }
-
-        public GuiTheme getGuiTheme() {
-            return guiTheme;
-        }
+    fun trigger() {
+        action?.run()
     }
 
-    private final Runnable action;
-    private final ContextAction contextAction;
-
-    public ActionSetting(String name, Runnable action) {
-        this(name, action, SettingGroup.MAIN);
-    }
-
-    public ActionSetting(String name, Runnable action, SettingGroup group) {
-        super(name, group);
-        this.action = action;
-        this.contextAction = null;
-    }
-
-    public ActionSetting(String name, ContextAction contextAction) {
-        this(name, contextAction, SettingGroup.MAIN);
-    }
-
-    public ActionSetting(String name, ContextAction contextAction, SettingGroup group) {
-        super(name, group);
-        this.action = null;
-        this.contextAction = contextAction;
-    }
-
-    public void trigger() {
-        if (action != null) {
-            action.run();
-        }
-    }
-
-    public void trigger(ActionContext context) {
-        if (contextAction != null) {
-            contextAction.run(context);
-        } else {
-            trigger();
-        }
+    fun trigger(context: ActionContext) {
+        contextAction?.run(context) ?: trigger()
     }
 }
-
